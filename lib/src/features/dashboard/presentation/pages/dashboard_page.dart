@@ -1829,6 +1829,22 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
     return parsed ?? 0;
   }
 
+  void _adjustMargin(double delta) {
+    final current = _parseDecimal(
+      _marginController.text,
+    ).clamp(0, 99.9).toDouble();
+    final updated = (current + delta).clamp(0, 99.9).toDouble();
+    final display = updated % 1 == 0
+        ? updated.toStringAsFixed(0)
+        : updated.toStringAsFixed(1);
+
+    _marginController
+      ..text = display
+      ..selection = TextSelection.collapsed(offset: display.length);
+
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -2080,23 +2096,87 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
                         isDense: true,
                       ),
                     ),
-                    TextField(
-                      controller: _marginController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        labelText: 'Margem',
-                        hintText: 'Ex: 20',
-                        suffixText: '%',
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Margem %',
+                              floatingLabelBehavior:
+                                  FloatingLabelBehavior.always,
+                              filled: true,
+                              fillColor: Theme.of(context).colorScheme.surface,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 13,
+                                vertical: 3,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                IconButton(
+                                  onPressed: () => _adjustMargin(-1),
+                                  tooltip: 'Diminuir margem',
+                                  icon: const Icon(Icons.remove, size: 18),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 30,
+                                    minHeight: 30,
+                                  ),
+                                ),
+                                Container(
+                                  width: 1,
+                                  height: 24,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.outlineVariant,
+                                ),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _marginController,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                    onChanged: (_) => setState(() {}),
+                                    textAlign: TextAlign.center,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Ex: 20',
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  width: 1,
+                                  height: 24,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.outlineVariant,
+                                ),
+                                IconButton(
+                                  onPressed: () => _adjustMargin(1),
+                                  tooltip: 'Aumentar margem',
+                                  icon: const Icon(Icons.add, size: 18),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 30,
+                                    minHeight: 30,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                        isDense: true,
-                      ),
+                      ],
                     ),
                   ];
 
