@@ -1,0 +1,13 @@
+import '../../../../core/usecases/usecase.dart';
+import '../repositories/product_repository.dart';
+
+class DeleteProduct implements UseCase<Future<void>, String> {
+  DeleteProduct(this._repository);
+
+  final ProductRepository _repository;
+
+  @override
+  Future<void> call(String params) {
+    return _repository.deleteProduct(params);
+  }
+}
