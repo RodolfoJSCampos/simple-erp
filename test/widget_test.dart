@@ -5,20 +5,21 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:simple_erp/src/app/app_widget.dart';
-import 'package:simple_erp/src/app/dependencies.dart';
+import 'package:simple_erp/src/features/auth/presentation/pages/login_page.dart';
 
 void main() {
-  testWidgets('Renders ERP dashboard', (WidgetTester tester) async {
+  testWidgets('Renders login page', (WidgetTester tester) async {
     await tester.pumpWidget(
-      AppWidget(dependencies: AppDependencies.build(useFirebase: false)),
+      const MaterialApp(home: LoginPage()),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('Simple ERP'), findsOneWidget);
-    expect(find.text('Produtos'), findsWidgets);
-    expect(find.text('Pedidos'), findsWidgets);
+    expect(find.text('E-mail'), findsOneWidget);
+    expect(find.text('Senha'), findsOneWidget);
+    expect(find.text('Entrar'), findsOneWidget);
   });
 }

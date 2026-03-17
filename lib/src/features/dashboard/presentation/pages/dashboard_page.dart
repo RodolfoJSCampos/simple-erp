@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
@@ -41,6 +42,8 @@ class _DashboardPageState extends State<DashboardPage> {
   String _searchQuery = '';
   String _selectedBrandFilter = _allBrandsLabel;
   _ExpirationFilter _expirationFilter = _ExpirationFilter.all;
+  _ProductSortOrder _sortOrder = _ProductSortOrder.expiration;
+  bool _sortAscending = true;
   String _orderSearchQuery = '';
   String _selectedOriginFilter = _allOriginsLabel;
 
@@ -223,6 +226,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        insetPadding: _dialogInsetPadding(context),
         title: const Text('Excluir produto'),
         content: Text('Deseja excluir o produto ${product.description}?'),
         actions: [
@@ -243,7 +247,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     await widget.productController.delete(product.sku);
-    await _reloadData();
+    await _loadProducts();
 
     if (!mounted) {
       return;
@@ -290,11 +294,8 @@ class _DashboardPageState extends State<DashboardPage> {
           .toList(growable: false),
     );
 
-    await widget.orderController.createOrigin(
-      OrderOrigin(name: formData.origin, iconUrl: formData.originIconUrl),
-    );
     await widget.orderController.create(updatedOrder);
-    await _reloadData();
+    await _loadOrders();
 
     if (!mounted) {
       return;
@@ -308,6 +309,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        insetPadding: _dialogInsetPadding(context),
         title: const Text('Excluir pedido'),
         content: Text('Deseja excluir o pedido ${order.id}?'),
         actions: [
@@ -328,7 +330,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     await widget.orderController.delete(order.id);
-    await _reloadData();
+    await _loadOrders();
 
     if (!mounted) {
       return;
@@ -363,10 +365,6 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
-    await widget.orderController.createOrigin(
-      OrderOrigin(name: formData.origin, iconUrl: formData.originIconUrl),
-    );
-
     final orderId = DateTime.now().millisecondsSinceEpoch.toString();
     final now = DateTime.now();
     final order = Order(
@@ -387,8 +385,13 @@ class _DashboardPageState extends State<DashboardPage> {
     );
 
     await widget.orderController.create(order);
+
+    final productsBySku = <String, Product>{
+      for (final product in _products) product.sku: product,
+    };
     final quantityBySku = <String, int>{};
     final minExpirationBySku = <String, DateTime>{};
+    final costsBySku = <String, List<ProductCost>>{};
     for (final item in formData.items) {
       quantityBySku[item.productSku] =
           (quantityBySku[item.productSku] ?? 0) + item.quantity;
@@ -398,43 +401,47 @@ class _DashboardPageState extends State<DashboardPage> {
         minExpirationBySku[item.productSku] = item.expirationDate;
       }
 
-      await widget.productController.registerCost(
-        sku: item.productSku,
-        cost: ProductCost(
-          orderId: orderId,
-          value: item.costPerItem,
-          registeredAt: now,
-          origin: formData.origin,
-        ),
-      );
+      costsBySku
+          .putIfAbsent(item.productSku, () => <ProductCost>[])
+          .add(
+            ProductCost(
+              orderId: orderId,
+              value: item.costPerItem,
+              registeredAt: now,
+              origin: formData.origin,
+            ),
+          );
     }
 
+    final productUpdateFutures = <Future<void>>[];
     for (final entry in quantityBySku.entries) {
-      Product? currentProduct;
-      for (final product in _products) {
-        if (product.sku == entry.key) {
-          currentProduct = product;
-          break;
-        }
-      }
+      final currentProduct = productsBySku[entry.key];
       if (currentProduct == null) {
         continue;
       }
 
-      await widget.productController.updateStock(
-        sku: currentProduct.sku,
-        newStock: currentProduct.stock + entry.value,
+      final nearestExpiration = minExpirationBySku[currentProduct.sku];
+      final currentExpiration = currentProduct.expirationDate;
+      final newExpirationDate = switch ((currentExpiration, nearestExpiration)) {
+        (null, final DateTime nearest) => nearest,
+        (final DateTime current, final DateTime nearest) =>
+          nearest.isBefore(current) ? nearest : current,
+        _ => currentExpiration,
+      };
+
+      final updatedProduct = currentProduct.copyWith(
+        stock: currentProduct.stock + entry.value,
+        expirationDate: newExpirationDate,
+        costHistory: [
+          ...currentProduct.costHistory,
+          ...?costsBySku[currentProduct.sku],
+        ],
       );
 
-      final nearestExpiration = minExpirationBySku[currentProduct.sku];
-      if (nearestExpiration != null &&
-          nearestExpiration.isBefore(currentProduct.expirationDate)) {
-        await widget.productController.updateExpirationDate(
-          sku: currentProduct.sku,
-          newExpirationDate: nearestExpiration,
-        );
-      }
+      productUpdateFutures.add(widget.productController.create(updatedProduct));
     }
+
+    await Future.wait(productUpdateFutures);
 
     await _reloadData();
 
@@ -499,11 +506,14 @@ class _DashboardPageState extends State<DashboardPage> {
                   product.description.toLowerCase().contains(normalizedQuery) ||
                   product.sku.toLowerCase().contains(normalizedQuery);
 
-              final date = DateTime(
-                product.expirationDate.year,
-                product.expirationDate.month,
-                product.expirationDate.day,
-              );
+              final expirationDate = product.expirationDate;
+              final date = expirationDate == null
+                  ? null
+                  : DateTime(
+                      expirationDate.year,
+                      expirationDate.month,
+                      expirationDate.day,
+                    );
               final today = DateTime(now.year, now.month, now.day);
               final maxWarning = DateTime(
                 warningDate.year,
@@ -514,17 +524,48 @@ class _DashboardPageState extends State<DashboardPage> {
               final matchesExpiration = switch (_expirationFilter) {
                 _ExpirationFilter.all => true,
                 _ExpirationFilter.warning =>
-                  date.isAtSameMomentAs(today) ||
-                      (date.isAfter(today) &&
-                          (date.isAtSameMomentAs(maxWarning) ||
-                              date.isBefore(maxWarning))),
-                _ExpirationFilter.expired => date.isBefore(today),
+                  date != null &&
+                      (date.isAtSameMomentAs(today) ||
+                          (date.isAfter(today) &&
+                              (date.isAtSameMomentAs(maxWarning) ||
+                                  date.isBefore(maxWarning)))),
+                _ExpirationFilter.expired =>
+                  date != null && date.isBefore(today),
               };
 
               return matchesBrand && matchesQuery && matchesExpiration;
             })
             .toList(growable: false)
-          ..sort((a, b) => a.expirationDate.compareTo(b.expirationDate));
+          ..sort((a, b) {
+            final aOutOfStock = a.stock <= 0;
+            final bOutOfStock = b.stock <= 0;
+            if (aOutOfStock != bOutOfStock) {
+              return aOutOfStock ? 1 : -1;
+            }
+
+            final int cmp;
+            switch (_sortOrder) {
+              case _ProductSortOrder.alphabetical:
+                cmp = a.description.toLowerCase().compareTo(
+                  b.description.toLowerCase(),
+                );
+              case _ProductSortOrder.expiration:
+                final aDate = a.expirationDate;
+                final bDate = b.expirationDate;
+                if (aDate == null && bDate == null) {
+                  cmp = 0;
+                } else if (aDate == null) {
+                  cmp = 1;
+                } else if (bDate == null) {
+                  cmp = -1;
+                } else {
+                  cmp = aDate.compareTo(bDate);
+                }
+              case _ProductSortOrder.stock:
+                cmp = a.stock.compareTo(b.stock);
+            }
+            return _sortAscending ? cmp : -cmp;
+          });
 
     return filtered;
   }
@@ -542,7 +583,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
   bool get _hasActiveAdvancedProductFilters {
     return _selectedBrandFilter != _allBrandsLabel ||
-        _expirationFilter != _ExpirationFilter.all;
+        _expirationFilter != _ExpirationFilter.all ||
+        _sortOrder != _ProductSortOrder.expiration ||
+        !_sortAscending;
   }
 
   int get _activeAdvancedProductFilterCount {
@@ -553,6 +596,9 @@ class _DashboardPageState extends State<DashboardPage> {
     if (_expirationFilter != _ExpirationFilter.all) {
       count++;
     }
+    if (_sortOrder != _ProductSortOrder.expiration || !_sortAscending) {
+      count++;
+    }
     return count;
   }
 
@@ -560,7 +606,17 @@ class _DashboardPageState extends State<DashboardPage> {
     setState(() {
       _selectedBrandFilter = _allBrandsLabel;
       _expirationFilter = _ExpirationFilter.all;
+      _sortOrder = _ProductSortOrder.expiration;
+      _sortAscending = true;
     });
+  }
+
+  String get _sortOrderLabel {
+    return switch (_sortOrder) {
+      _ProductSortOrder.alphabetical => 'Alfabético',
+      _ProductSortOrder.expiration => 'Validade',
+      _ProductSortOrder.stock => 'Estoque',
+    };
   }
 
   bool get _hasActiveAdvancedOrderFilters {
@@ -630,179 +686,226 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     final isProductsTab = _selectedIndex == 0;
     final isOrdersTab = _selectedIndex == 2;
+    final canToggleEditMode = isProductsTab || isOrdersTab;
+    final editWarningColor = Colors.amber.shade700;
+    final isEditHighlightVisible = _editModeEnabled && canToggleEditMode;
+    final scheme = Theme.of(context).colorScheme;
+    final appBackgroundColor = isEditHighlightVisible
+        ? Color.alphaBlend(
+            editWarningColor.withValues(alpha: 0.08),
+            scheme.surface,
+          )
+        : null;
+    final appBarBackgroundColor = isEditHighlightVisible
+        ? Color.alphaBlend(
+            editWarningColor.withValues(alpha: 0.14),
+            scheme.surface,
+          )
+        : null;
 
     return Scaffold(
+      backgroundColor: appBackgroundColor,
       appBar: AppBar(
+        backgroundColor: appBarBackgroundColor,
+        surfaceTintColor: Colors.transparent,
         title: const Text('Simple ERP'),
         actions: [
-          IconButton(
-            onPressed: () {
-              setState(() => _editModeEnabled = !_editModeEnabled);
-            },
-            icon: Icon(
-              _editModeEnabled ? Icons.edit_off_outlined : Icons.edit_outlined,
-            ),
-            tooltip: _editModeEnabled
-                ? 'Desativar modo edicao/exclusao'
-                : 'Ativar modo edicao/exclusao',
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Center(
-              child: Chip(
-                avatar: Icon(
-                  widget.usingFirebase ? Icons.cloud_done : Icons.cloud_off,
-                  size: 16,
-                ),
-                label: Text(widget.usingFirebase ? 'Firebase' : 'Memoria'),
-                visualDensity: VisualDensity.compact,
+          if (canToggleEditMode)
+            IconButton(
+              onPressed: () {
+                setState(() => _editModeEnabled = !_editModeEnabled);
+              },
+              icon: Icon(
+                _editModeEnabled
+                    ? Icons.edit_off_outlined
+                    : Icons.edit_outlined,
+                color: _editModeEnabled ? editWarningColor : null,
               ),
+              tooltip: _editModeEnabled
+                  ? 'Desativar modo edicao/exclusao'
+                  : 'Ativar modo edicao/exclusao',
             ),
-          ),
           IconButton(
-            onPressed: _reloadData,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Atualizar listas',
+            onPressed: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Sair'),
+                  content: const Text('Deseja encerrar a sessao?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancelar'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Sair'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                await FirebaseAuth.instance.signOut();
+              }
+            },
+            icon: const Icon(Icons.logout),
+            tooltip: 'Sair',
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_editModeEnabled)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade100,
-                border: Border.all(color: Colors.amber.shade700),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Modo edicao/exclusao ativo: acoes de editar e excluir estao habilitadas.',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (isProductsTab)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth >= 860;
-
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outlineVariant,
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: isEditHighlightVisible
+              ? editWarningColor.withValues(alpha: 0.04)
+              : Colors.transparent,
+        ),
+        child: Column(
+          children: [
+            if (isEditHighlightVisible)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100,
+                  border: Border.all(color: editWarningColor),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Modo edicao/exclusao ativo: acoes de editar e excluir estao habilitadas.',
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: SizedBox(
-                                height: 44,
-                                child: TextField(
-                                  onChanged: (value) {
-                                    setState(() => _searchQuery = value);
-                                  },
-                                  decoration: InputDecoration(
-                                    prefixIcon: const Icon(Icons.search),
-                                    hintText: 'Buscar por descricao ou SKU',
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
-                                    ),
-                                    suffixIcon: _searchQuery.isEmpty
-                                        ? null
-                                        : IconButton(
-                                            tooltip: 'Limpar busca',
-                                            onPressed: () {
-                                              setState(() => _searchQuery = '');
-                                            },
-                                            icon: const Icon(Icons.close),
+                  ],
+                ),
+              ),
+            if (isProductsTab)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth >= 860;
+
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: SizedBox(
+                                  height: 44,
+                                  child: TextField(
+                                    onChanged: (value) {
+                                      setState(() => _searchQuery = value);
+                                    },
+                                    decoration: InputDecoration(
+                                      prefixIcon: const Icon(Icons.search),
+                                      hintText: 'Buscar por descricao ou SKU',
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 8,
                                           ),
-                                    filled: true,
-                                    fillColor: Theme.of(
-                                      context,
-                                    ).colorScheme.surface,
-                                    isDense: true,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: BorderSide(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.outlineVariant,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: BorderSide(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                        width: 1.4,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Tooltip(
-                              message: _showAdvancedProductFilters
-                                  ? 'Ocultar filtros'
-                                  : 'Mostrar filtros',
-                              child: SizedBox(
-                                width: 44,
-                                height: 44,
-                                child: Align(
-                                  alignment: Alignment.topCenter,
-                                  child: SizedBox(
-                                    width: 40,
-                                    height: 40,
-                                    child: Material(
-                                      color: Theme.of(
+                                      suffixIcon: _searchQuery.isEmpty
+                                          ? null
+                                          : IconButton(
+                                              tooltip: 'Limpar busca',
+                                              onPressed: () {
+                                                setState(
+                                                  () => _searchQuery = '',
+                                                );
+                                              },
+                                              icon: const Icon(Icons.close),
+                                            ),
+                                      filled: true,
+                                      fillColor: Theme.of(
                                         context,
                                       ).colorScheme.surface,
-                                      shape: CircleBorder(
-                                        side: BorderSide(
+                                      isDense: true,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide(
                                           color: Theme.of(
                                             context,
                                           ).colorScheme.outlineVariant,
                                         ),
                                       ),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: InkWell(
-                                        customBorder: const CircleBorder(),
-                                        onTap: () {
-                                          setState(() {
-                                            _showAdvancedProductFilters =
-                                                !_showAdvancedProductFilters;
-                                          });
-                                        },
-                                        child: Center(
-                                          child: Icon(
-                                            _showAdvancedProductFilters
-                                                ? Icons.expand_less
-                                                : Icons.tune,
-                                            size: 18,
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                          width: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Tooltip(
+                                message: _showAdvancedProductFilters
+                                    ? 'Ocultar filtros'
+                                    : 'Mostrar filtros',
+                                child: SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: Align(
+                                    alignment: Alignment.topCenter,
+                                    child: SizedBox(
+                                      width: 40,
+                                      height: 40,
+                                      child: Material(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.surface,
+                                        shape: CircleBorder(
+                                          side: BorderSide(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
+                                          ),
+                                        ),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: InkWell(
+                                          customBorder: const CircleBorder(),
+                                          onTap: () {
+                                            setState(() {
+                                              _showAdvancedProductFilters =
+                                                  !_showAdvancedProductFilters;
+                                            });
+                                          },
+                                          child: Center(
+                                            child: Icon(
+                                              _showAdvancedProductFilters
+                                                  ? Icons.expand_less
+                                                  : Icons.tune,
+                                              size: 18,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -810,168 +913,237 @@ class _DashboardPageState extends State<DashboardPage> {
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        if (_showAdvancedProductFilters) ...[
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              if (_hasActiveAdvancedProductFilters)
-                                _QuickStatChip(
-                                  icon: Icons.filter_alt_outlined,
-                                  label:
-                                      '$_activeAdvancedProductFilterCount filtro(s) ativo(s)',
-                                ),
-                              if (_hasActiveAdvancedProductFilters)
-                                ActionChip(
-                                  avatar: const Icon(Icons.clear, size: 16),
-                                  label: const Text('Limpar filtros'),
-                                  onPressed: _clearAdvancedProductFilters,
-                                ),
-                              if (_selectedBrandFilter != _allBrandsLabel)
-                                _QuickStatChip(
-                                  icon: Icons.sell_outlined,
-                                  label: _selectedBrandFilter,
-                                ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          if (isWide)
-                            Row(
-                              children: [
-                                Expanded(child: _buildBrandFilterField()),
-                                const SizedBox(width: 10),
-                                Expanded(child: _buildExpirationFilterField()),
-                              ],
-                            )
-                          else
-                            Column(
-                              children: [
-                                _buildBrandFilterField(),
-                                const SizedBox(height: 10),
-                                _buildExpirationFilterField(),
-                              ],
-                            ),
-                        ],
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          if (isOrdersTab)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 44,
-                            child: TextField(
-                              onChanged: (value) {
-                                setState(() => _orderSearchQuery = value);
-                              },
-                              decoration: InputDecoration(
-                                prefixIcon: const Icon(Icons.search),
-                                hintText:
-                                    'Buscar pedidos por produto (descricao ou SKU)',
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                suffixIcon: _orderSearchQuery.isEmpty
-                                    ? null
-                                    : IconButton(
-                                        tooltip: 'Limpar busca',
-                                        onPressed: () {
-                                          setState(
-                                            () => _orderSearchQuery = '',
-                                          );
-                                        },
-                                        icon: const Icon(Icons.close),
+                          if (_showAdvancedProductFilters) ...[
+                            const SizedBox(height: 10),
+                            if (_hasActiveAdvancedProductFilters)
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _QuickStatChip(
+                                    icon: Icons.filter_alt_outlined,
+                                    label:
+                                        '$_activeAdvancedProductFilterCount filtro(s) ativo(s)',
+                                  ),
+                                  if (_selectedBrandFilter != _allBrandsLabel)
+                                    _QuickStatChip(
+                                      icon: Icons.sell_outlined,
+                                      label: _selectedBrandFilter,
+                                    ),
+                                  if (_sortOrder !=
+                                          _ProductSortOrder.expiration ||
+                                      !_sortAscending)
+                                    _QuickStatChip(
+                                      icon: _sortAscending
+                                          ? Icons.arrow_upward
+                                          : Icons.arrow_downward,
+                                      label: _sortOrderLabel,
+                                    ),
+                                ],
+                              ),
+                            if (_hasActiveAdvancedProductFilters)
+                              const SizedBox(height: 10),
+                            if (isWide)
+                              Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(child: _buildBrandFilterField()),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: _buildExpirationFilterField(),
                                       ),
-                                filled: true,
-                                fillColor: Theme.of(
-                                  context,
-                                ).colorScheme.surface,
-                                isDense: true,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outlineVariant,
+                                    ],
                                   ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    width: 1.4,
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      Expanded(child: _buildSortOrderField()),
+                                      const SizedBox(width: 8),
+                                      Tooltip(
+                                        message: _sortAscending
+                                            ? 'Ordem crescente'
+                                            : 'Ordem decrescente',
+                                        child: IconButton.outlined(
+                                          onPressed: () => setState(
+                                            () => _sortAscending =
+                                                !_sortAscending,
+                                          ),
+                                          icon: Icon(
+                                            _sortAscending
+                                                ? Icons.arrow_upward
+                                                : Icons.arrow_downward,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                ],
+                              )
+                            else
+                              Column(
+                                children: [
+                                  _buildBrandFilterField(),
+                                  const SizedBox(height: 10),
+                                  _buildExpirationFilterField(),
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      Expanded(child: _buildSortOrderField()),
+                                      const SizedBox(width: 8),
+                                      Tooltip(
+                                        message: _sortAscending
+                                            ? 'Ordem crescente'
+                                            : 'Ordem decrescente',
+                                        child: IconButton.outlined(
+                                          onPressed: () => setState(
+                                            () => _sortAscending =
+                                                !_sortAscending,
+                                          ),
+                                          icon: Icon(
+                                            _sortAscending
+                                                ? Icons.arrow_upward
+                                                : Icons.arrow_downward,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            if (_hasActiveAdvancedProductFilters) ...[
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: _clearAdvancedProductFilters,
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  label: const Text('Limpar filtros'),
                                 ),
                               ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Tooltip(
-                          message: _showAdvancedOrderFilters
-                              ? 'Ocultar filtros'
-                              : 'Mostrar filtros',
-                          child: SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: SizedBox(
-                                width: 40,
-                                height: 40,
-                                child: Material(
-                                  color: Theme.of(context).colorScheme.surface,
-                                  shape: CircleBorder(
-                                    side: BorderSide(
+                            ],
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (isOrdersTab)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 44,
+                              child: TextField(
+                                onChanged: (value) {
+                                  setState(() => _orderSearchQuery = value);
+                                },
+                                decoration: InputDecoration(
+                                  prefixIcon: const Icon(Icons.search),
+                                  hintText:
+                                      'Buscar pedidos por produto (descricao ou SKU)',
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  suffixIcon: _orderSearchQuery.isEmpty
+                                      ? null
+                                      : IconButton(
+                                          tooltip: 'Limpar busca',
+                                          onPressed: () {
+                                            setState(
+                                              () => _orderSearchQuery = '',
+                                            );
+                                          },
+                                          icon: const Icon(Icons.close),
+                                        ),
+                                  filled: true,
+                                  fillColor: Theme.of(
+                                    context,
+                                  ).colorScheme.surface,
+                                  isDense: true,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
                                       color: Theme.of(
                                         context,
                                       ).colorScheme.outlineVariant,
                                     ),
                                   ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: InkWell(
-                                    customBorder: const CircleBorder(),
-                                    onTap: () {
-                                      setState(() {
-                                        _showAdvancedOrderFilters =
-                                            !_showAdvancedOrderFilters;
-                                      });
-                                    },
-                                    child: Center(
-                                      child: Icon(
-                                        _showAdvancedOrderFilters
-                                            ? Icons.expand_less
-                                            : Icons.tune,
-                                        size: 18,
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                      width: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Tooltip(
+                            message: _showAdvancedOrderFilters
+                                ? 'Ocultar filtros'
+                                : 'Mostrar filtros',
+                            child: SizedBox(
+                              width: 44,
+                              height: 44,
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: Material(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
+                                    shape: CircleBorder(
+                                      side: BorderSide(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outlineVariant,
+                                      ),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: InkWell(
+                                      customBorder: const CircleBorder(),
+                                      onTap: () {
+                                        setState(() {
+                                          _showAdvancedOrderFilters =
+                                              !_showAdvancedOrderFilters;
+                                        });
+                                      },
+                                      child: Center(
+                                        child: Icon(
+                                          _showAdvancedOrderFilters
+                                              ? Icons.expand_less
+                                              : Icons.tune,
+                                          size: 18,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -979,107 +1151,107 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
                           ),
+                        ],
+                      ),
+                      if (_showAdvancedOrderFilters) ...[
+                        const SizedBox(height: 10),
+                        if (_hasActiveAdvancedOrderFilters)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _QuickStatChip(
+                                  icon: Icons.filter_alt_outlined,
+                                  label:
+                                      '$_activeAdvancedOrderFilterCount filtro(s) ativo(s)',
+                                ),
+                                ActionChip(
+                                  avatar: const Icon(Icons.clear, size: 16),
+                                  label: const Text('Limpar filtros'),
+                                  onPressed: _clearAdvancedOrderFilters,
+                                ),
+                              ],
+                            ),
+                          ),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedOriginFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Filtrar por origem',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.outlineVariant,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 1.4,
+                              ),
+                            ),
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.surface,
+                          ),
+                          items: [_allOriginsLabel, ..._availableOrigins]
+                              .map(
+                                (origin) => DropdownMenuItem<String>(
+                                  value: origin,
+                                  child: Text(origin),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _selectedOriginFilter = value);
+                          },
                         ),
                       ],
-                    ),
-                    if (_showAdvancedOrderFilters) ...[
-                      const SizedBox(height: 10),
-                      if (_hasActiveAdvancedOrderFilters)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _QuickStatChip(
-                                icon: Icons.filter_alt_outlined,
-                                label:
-                                    '$_activeAdvancedOrderFilterCount filtro(s) ativo(s)',
-                              ),
-                              ActionChip(
-                                avatar: const Icon(Icons.clear, size: 16),
-                                label: const Text('Limpar filtros'),
-                                onPressed: _clearAdvancedOrderFilters,
-                              ),
-                            ],
-                          ),
-                        ),
-                      DropdownButtonFormField<String>(
-                        initialValue: _selectedOriginFilter,
-                        decoration: InputDecoration(
-                          labelText: 'Filtrar por origem',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.outlineVariant,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 1.4,
-                            ),
-                          ),
-                          filled: true,
-                          fillColor: Theme.of(context).colorScheme.surface,
-                        ),
-                        items: [_allOriginsLabel, ..._availableOrigins]
-                            .map(
-                              (origin) => DropdownMenuItem<String>(
-                                value: origin,
-                                child: Text(origin),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _selectedOriginFilter = value);
-                        },
-                      ),
                     ],
-                  ],
+                  ),
                 ),
               ),
+            Expanded(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  _ProductsListTab(
+                    products: _filteredProducts,
+                    orders: _orders,
+                    isLoading: _loadingProducts,
+                    onUpdateStock: _showManualStockUpdateDialog,
+                    onUpdateExpirationDate: _showManualExpirationUpdateDialog,
+                    isEditModeEnabled: _editModeEnabled,
+                    onEditProduct: _showEditProductDialog,
+                    onDeleteProduct: _deleteProduct,
+                    emptyMessage: _products.isEmpty
+                        ? 'Use o botao de adicionar para incluir o primeiro produto.'
+                        : 'Nenhum produto encontrado para os filtros aplicados.',
+                  ),
+                  const _PriceCalculatorTab(),
+                  _OrdersListTab(
+                    orders: _filteredOrders,
+                    products: _products,
+                    isLoading: _loadingOrders,
+                    isEditModeEnabled: _editModeEnabled,
+                    onEditOrder: _showEditOrderDialog,
+                    onDeleteOrder: _deleteOrder,
+                    emptyMessage: _orders.isEmpty
+                        ? 'Use o botao de adicionar para registrar o primeiro pedido.'
+                        : 'Nenhum pedido encontrado para os filtros aplicados.',
+                  ),
+                ],
+              ),
             ),
-          Expanded(
-            child: IndexedStack(
-              index: _selectedIndex,
-              children: [
-                _ProductsListTab(
-                  products: _filteredProducts,
-                  orders: _orders,
-                  isLoading: _loadingProducts,
-                  onUpdateStock: _showManualStockUpdateDialog,
-                  onUpdateExpirationDate: _showManualExpirationUpdateDialog,
-                  isEditModeEnabled: _editModeEnabled,
-                  onEditProduct: _showEditProductDialog,
-                  onDeleteProduct: _deleteProduct,
-                  emptyMessage: _products.isEmpty
-                      ? 'Use o botao de adicionar para incluir o primeiro produto.'
-                      : 'Nenhum produto encontrado para os filtros aplicados.',
-                ),
-                const _PriceCalculatorTab(),
-                _OrdersListTab(
-                  orders: _filteredOrders,
-                  products: _products,
-                  isLoading: _loadingOrders,
-                  isEditModeEnabled: _editModeEnabled,
-                  onEditOrder: _showEditOrderDialog,
-                  onDeleteOrder: _deleteOrder,
-                  emptyMessage: _orders.isEmpty
-                      ? 'Use o botao de adicionar para registrar o primeiro pedido.'
-                      : 'Nenhum pedido encontrado para os filtros aplicados.',
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: isOrdersTab || isProductsTab
           ? FloatingActionButton(
@@ -1111,6 +1283,34 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSortOrderField() {
+    return DropdownButtonFormField<_ProductSortOrder>(
+      initialValue: _sortOrder,
+      decoration: const InputDecoration(
+        labelText: 'Ordenar por',
+        border: OutlineInputBorder(),
+      ),
+      items: const [
+        DropdownMenuItem(
+          value: _ProductSortOrder.alphabetical,
+          child: Text('Alfabético'),
+        ),
+        DropdownMenuItem(
+          value: _ProductSortOrder.expiration,
+          child: Text('Validade'),
+        ),
+        DropdownMenuItem(
+          value: _ProductSortOrder.stock,
+          child: Text('Estoque'),
+        ),
+      ],
+      onChanged: (value) {
+        if (value == null) return;
+        setState(() => _sortOrder = value);
+      },
     );
   }
 
@@ -1248,10 +1448,12 @@ class _ProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = _expirationStatus(product.expirationDate, context);
     final scheme = Theme.of(context).colorScheme;
+    final isOutOfStock = product.stock <= 0;
 
-    return Card(
+    final card = Card(
       elevation: 0,
       margin: EdgeInsets.zero,
+      color: isOutOfStock ? scheme.surfaceContainerLow : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: scheme.outlineVariant),
@@ -1262,7 +1464,10 @@ class _ProductCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Left accent bar colored by expiration status
-            Container(width: 4, color: status.color),
+            Container(
+              width: 4,
+              color: isOutOfStock ? scheme.outline : status.color,
+            ),
             Expanded(
               child: InkWell(
                 onTap: () {
@@ -1385,25 +1590,43 @@ class _ProductCard extends StatelessWidget {
                           if (isEditModeEnabled) {
                             items.add(const PopupMenuDivider());
                             items.add(
-                              const PopupMenuItem<_ProductAction>(
+                              PopupMenuItem<_ProductAction>(
                                 value: _ProductAction.edit,
                                 child: Row(
                                   children: [
-                                    Icon(Icons.edit_outlined, size: 18),
-                                    SizedBox(width: 12),
-                                    Text('Editar produto'),
+                                    Icon(
+                                      Icons.edit_outlined,
+                                      size: 18,
+                                      color: Colors.amber.shade700,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Editar produto',
+                                      style: TextStyle(
+                                        color: Colors.amber.shade700,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
                             );
                             items.add(
-                              const PopupMenuItem<_ProductAction>(
+                              PopupMenuItem<_ProductAction>(
                                 value: _ProductAction.delete,
                                 child: Row(
                                   children: [
-                                    Icon(Icons.delete_outline, size: 18),
-                                    SizedBox(width: 12),
-                                    Text('Excluir produto'),
+                                    Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                      color: Colors.amber.shade700,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Excluir produto',
+                                      style: TextStyle(
+                                        color: Colors.amber.shade700,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1421,6 +1644,36 @@ class _ProductCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+
+    if (!isOutOfStock) {
+      return card;
+    }
+
+    return ColorFiltered(
+      colorFilter: const ColorFilter.matrix([
+        0.2126,
+        0.7152,
+        0.0722,
+        0,
+        0,
+        0.2126,
+        0.7152,
+        0.0722,
+        0,
+        0,
+        0.2126,
+        0.7152,
+        0.0722,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ]),
+      child: card,
     );
   }
 }
@@ -1630,14 +1883,40 @@ class _OrdersListTab extends StatelessWidget {
                         }
                         onDeleteOrder(order);
                       },
-                      itemBuilder: (context) => const [
+                      itemBuilder: (context) => [
                         PopupMenuItem<_OrderAction>(
                           value: _OrderAction.edit,
-                          child: Text('Editar pedido'),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.edit_outlined,
+                                size: 18,
+                                color: Colors.amber.shade700,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Editar pedido',
+                                style: TextStyle(color: Colors.amber.shade700),
+                              ),
+                            ],
+                          ),
                         ),
                         PopupMenuItem<_OrderAction>(
                           value: _OrderAction.delete,
-                          child: Text('Excluir pedido'),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: Colors.amber.shade700,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Excluir pedido',
+                                style: TextStyle(color: Colors.amber.shade700),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -1722,6 +2001,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
     final newValue = await showDialog<double>(
       context: context,
       builder: (context) => AlertDialog(
+        insetPadding: _dialogInsetPadding(context),
         title: Text(title),
         content: TextField(
           controller: controller,
@@ -1789,6 +2069,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
     final newValue = await showDialog<double>(
       context: context,
       builder: (context) => AlertDialog(
+        insetPadding: _dialogInsetPadding(context),
         title: const Text('Alterar operacao fixa'),
         content: TextField(
           controller: controller,
@@ -2096,87 +2377,34 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
                         isDense: true,
                       ),
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Margem %',
-                              floatingLabelBehavior:
-                                  FloatingLabelBehavior.always,
-                              filled: true,
-                              fillColor: Theme.of(context).colorScheme.surface,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 13,
-                                vertical: 3,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                IconButton(
-                                  onPressed: () => _adjustMargin(-1),
-                                  tooltip: 'Diminuir margem',
-                                  icon: const Icon(Icons.remove, size: 18),
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 30,
-                                    minHeight: 30,
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  height: 24,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.outlineVariant,
-                                ),
-                                Expanded(
-                                  child: TextField(
-                                    controller: _marginController,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                    onChanged: (_) => setState(() {}),
-                                    textAlign: TextAlign.center,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Ex: 20',
-                                      border: InputBorder.none,
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  height: 24,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.outlineVariant,
-                                ),
-                                IconButton(
-                                  onPressed: () => _adjustMargin(1),
-                                  tooltip: 'Aumentar margem',
-                                  icon: const Icon(Icons.add, size: 18),
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 30,
-                                    minHeight: 30,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                    TextField(
+                      controller: _marginController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                      textAlign: TextAlign.center,
+                      decoration: InputDecoration(
+                        labelText: 'Margem %',
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ],
+                        isDense: true,
+                        prefixIcon: IconButton(
+                          onPressed: () => _adjustMargin(-1),
+                          tooltip: 'Diminuir margem',
+                          icon: const Icon(Icons.remove, size: 18),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        suffixIcon: IconButton(
+                          onPressed: () => _adjustMargin(1),
+                          tooltip: 'Aumentar margem',
+                          icon: const Icon(Icons.add, size: 18),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
                     ),
                   ];
 
@@ -2559,10 +2787,11 @@ class _ProductOrderHistoryDialog extends StatelessWidget {
               .costPerItem;
 
     return AlertDialog(
+      insetPadding: _dialogInsetPadding(context),
       titlePadding: EdgeInsets.zero,
       contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       content: SizedBox(
-        width: 560,
+        width: _dialogMaxWidth(context, 560),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2878,11 +3107,11 @@ class _OrderItemsDialog extends StatelessWidget {
     );
 
     return AlertDialog(
-      titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      title: Text('Detalhes do pedido ${order.id}'),
+      insetPadding: _dialogInsetPadding(context),
+      titlePadding: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       content: SizedBox(
-        width: 620,
+        width: _dialogMaxWidth(context, 620),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -3079,7 +3308,7 @@ class _OrderItemsDialog extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'SKU ${item.productSku} | Validade ${_formatDate(item.expirationDate)}',
+                                    'SKU ${item.productSku} | ${_formatDate(item.expirationDate)}',
                                     style: Theme.of(
                                       context,
                                     ).textTheme.labelSmall,
@@ -3154,7 +3383,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
     }
 
     _createNewBrand = widget.brands.isEmpty;
-    _selectedBrand = widget.brands.isNotEmpty ? widget.brands.first : null;
+    _selectedBrand = null;
 
     if (initial != null) {
       final hasBrand = widget.brands.contains(initial.brand);
@@ -3182,6 +3411,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 600;
         return AlertDialog(
+          insetPadding: _dialogInsetPadding(context),
           title: Row(
             children: [
               Icon(
@@ -3201,7 +3431,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
           ),
           content: SingleChildScrollView(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: isWide ? 700 : 500),
+              constraints: BoxConstraints(maxWidth: isWide ? 700 : 560),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -3679,7 +3909,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
                     ),
                     Text(
                       _expirationDate == null
-                          ? 'Selecionar data'
+                          ? 'Sem data definida'
                           : _formatDate(_expirationDate!),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.bold,
@@ -3715,12 +3945,6 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    if (_expirationDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecione a validade do produto.')),
-      );
-      return;
-    }
 
     final brand = _createNewBrand
         ? _newBrandController.text.trim()
@@ -3738,7 +3962,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
         imageUrl: _imageUrlController.text.trim(),
         stock: int.parse(_stockController.text.trim()),
         brand: brand,
-        expirationDate: _expirationDate!,
+        expirationDate: _expirationDate,
       ),
     );
   }
@@ -3757,6 +3981,21 @@ class _UpdateStockDialogState extends State<_UpdateStockDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _stockController;
 
+  int get _parsedStock => int.tryParse(_stockController.text.trim()) ?? 0;
+
+  void _setStock(int value) {
+    final safeValue = value < 0 ? 0 : value;
+    final display = safeValue.toString();
+    _stockController
+      ..text = display
+      ..selection = TextSelection.collapsed(offset: display.length);
+    setState(() {});
+  }
+
+  void _adjustStock(int delta) {
+    _setStock(_parsedStock + delta);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -3773,24 +4012,89 @@ class _UpdateStockDialogState extends State<_UpdateStockDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return AlertDialog(
-      title: Text('Atualizar estoque (${widget.product.sku})'),
+      insetPadding: _dialogInsetPadding(context),
+      title: const Text('Atualizar estoque'),
       content: Form(
         key: _formKey,
-        child: TextFormField(
-          controller: _stockController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Novo estoque'),
-          validator: (value) {
-            if (_required(value, 'Novo estoque') != null) {
-              return _required(value, 'Novo estoque');
-            }
-            final parsed = int.tryParse(value!.trim());
-            if (parsed == null || parsed < 0) {
-              return 'Informe um valor inteiro valido.';
-            }
-            return null;
-          },
+        child: SizedBox(
+          width: _dialogMaxWidth(context, 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.product.description,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: scheme.outlineVariant),
+                ),
+                child: Row(
+                  children: [
+                    IconButton.filledTonal(
+                      onPressed: () => _adjustStock(-1),
+                      tooltip: 'Diminuir',
+                      icon: const Icon(Icons.remove),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text(
+                            'Novo estoque',
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          Text(
+                            _parsedStock.toString(),
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton.filled(
+                      onPressed: () => _adjustStock(1),
+                      tooltip: 'Aumentar',
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _stockController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Editar manualmente',
+                  prefixIcon: Icon(Icons.edit_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (_required(value, 'Novo estoque') != null) {
+                    return _required(value, 'Novo estoque');
+                  }
+                  final parsed = int.tryParse(value!.trim());
+                  if (parsed == null || parsed < 0) {
+                    return 'Informe um valor inteiro valido.';
+                  }
+                  return null;
+                },
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -3826,26 +4130,111 @@ class _UpdateExpirationDialogState extends State<_UpdateExpirationDialog> {
   DateTime? _selectedDate;
 
   @override
+  void initState() {
+    super.initState();
+    _selectedDate = widget.product.expirationDate;
+  }
+
+  void _applyQuickDate(int days) {
+    final baseDate = DateTime.now();
+    final candidate = DateTime(
+      baseDate.year,
+      baseDate.month,
+      baseDate.day,
+    ).add(Duration(days: days));
+    setState(() => _selectedDate = candidate);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return AlertDialog(
-      title: Text('Atualizar validade (${widget.product.sku})'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Validade atual: ${_formatDate(widget.product.expirationDate)}'),
-          const SizedBox(height: 8),
-          Text(
-            _selectedDate == null
-                ? 'Nova validade nao selecionada'
-                : 'Nova validade: ${_formatDate(_selectedDate!)}',
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: _pickDate,
-            child: const Text('Selecionar nova validade'),
-          ),
-        ],
+      insetPadding: _dialogInsetPadding(context),
+      title: const Text('Atualizar validade'),
+      content: SizedBox(
+        width: _dialogMaxWidth(context, 460),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.product.description,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Validade atual',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.product.expirationDate == null
+                        ? 'Sem data definida'
+                        : _formatDate(widget.product.expirationDate!),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Nova validade',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _selectedDate == null
+                        ? 'Nao selecionada'
+                        : _formatDate(_selectedDate!),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton(
+                  onPressed: () => _applyQuickDate(7),
+                  child: const Text('+7 dias'),
+                ),
+                OutlinedButton(
+                  onPressed: () => _applyQuickDate(15),
+                  child: const Text('+15 dias'),
+                ),
+                OutlinedButton(
+                  onPressed: () => _applyQuickDate(30),
+                  child: const Text('+30 dias'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _pickDate,
+                icon: const Icon(Icons.calendar_month_outlined),
+                label: const Text('Selecionar no calendario'),
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -3874,7 +4263,7 @@ class _UpdateExpirationDialogState extends State<_UpdateExpirationDialog> {
       context: context,
       firstDate: DateTime(now.year - 10),
       lastDate: DateTime(now.year + 20),
-      initialDate: _selectedDate ?? widget.product.expirationDate,
+      initialDate: _selectedDate ?? widget.product.expirationDate ?? now,
     );
 
     if (picked != null) {
@@ -3964,6 +4353,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 700;
         return AlertDialog(
+          insetPadding: _dialogInsetPadding(context),
           title: Row(
             children: [
               Icon(
@@ -3983,7 +4373,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
           ),
           content: SingleChildScrollView(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: isWide ? 800 : 600),
+              constraints: BoxConstraints(maxWidth: isWide ? 800 : 640),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -5153,9 +5543,13 @@ String? _required(String? value, String fieldName) {
 }
 
 _ExpirationStatus _expirationStatus(
-  DateTime expirationDate,
+  DateTime? expirationDate,
   BuildContext context,
 ) {
+  if (expirationDate == null) {
+    return _ExpirationStatus('Sem validade', Theme.of(context).colorScheme.outline);
+  }
+
   final today = DateTime.now();
   final date = DateTime(
     expirationDate.year,
@@ -5233,7 +5627,7 @@ class _ProductFormData {
   final String imageUrl;
   final int stock;
   final String brand;
-  final DateTime expirationDate;
+  final DateTime? expirationDate;
 }
 
 class _OrderFormData {
@@ -5287,6 +5681,33 @@ enum _ProductAction { updateStock, updateExpiration, edit, delete }
 enum _OrderAction { edit, delete }
 
 enum _ExpirationFilter { all, warning, expired }
+
+enum _ProductSortOrder { alphabetical, expiration, stock }
+
+double _dialogHorizontalInset(BuildContext context) {
+  final width = MediaQuery.sizeOf(context).width;
+  if (width < 420) {
+    return 12;
+  }
+  if (width < 600) {
+    return 20;
+  }
+  return 40;
+}
+
+EdgeInsets _dialogInsetPadding(BuildContext context) {
+  return EdgeInsets.symmetric(
+    horizontal: _dialogHorizontalInset(context),
+    vertical: 24,
+  );
+}
+
+double _dialogMaxWidth(BuildContext context, double preferredMaxWidth) {
+  final screenWidth = MediaQuery.sizeOf(context).width;
+  final availableWidth =
+      screenWidth - (_dialogHorizontalInset(context) * 2) - 24;
+  return min(preferredMaxWidth, max(availableWidth, 280));
+}
 
 class _QuickStatChip extends StatelessWidget {
   const _QuickStatChip({

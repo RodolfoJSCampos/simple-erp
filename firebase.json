@@ -1,1 +1,34 @@
-{"flutter":{"platforms":{"dart":{"lib/firebase_options.dart":{"projectId":"simple-erp-2026","configurations":{"android":"1:890128029495:android:027056f2abc7ced6f3ecb2","web":"1:890128029495:web:46bd8f2834e26c97f3ecb2","windows":"1:890128029495:web:5790f805e35c24f0f3ecb2"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "simple-erp-2026",
+          "configurations": {
+            "android": "1:890128029495:android:027056f2abc7ced6f3ecb2",
+            "web": "1:890128029495:web:46bd8f2834e26c97f3ecb2",
+            "windows": "1:890128029495:web:5790f805e35c24f0f3ecb2"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build\\web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

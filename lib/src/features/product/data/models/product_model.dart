@@ -9,7 +9,7 @@ class ProductModel extends Product {
     required super.stock,
     required super.brand,
     required super.costHistory,
-    required super.expirationDate,
+    super.expirationDate,
   });
 
   factory ProductModel.fromEntity(Product entity) {
@@ -30,6 +30,7 @@ class ProductModel extends Product {
     final costs = (map['costHistory'] as List<dynamic>)
         .map((item) => ProductCostModel.fromMap(item as Map<String, dynamic>))
         .toList(growable: false);
+    final rawExpirationDate = map['expirationDate'];
 
     return ProductModel(
       sku: map['sku'] as String,
@@ -38,7 +39,9 @@ class ProductModel extends Product {
       stock: map['stock'] as int,
       brand: map['brand'] as String,
       costHistory: costs,
-      expirationDate: DateTime.parse(map['expirationDate'] as String),
+      expirationDate: rawExpirationDate is String && rawExpirationDate.isNotEmpty
+          ? DateTime.parse(rawExpirationDate)
+          : null,
     );
   }
 
@@ -52,7 +55,8 @@ class ProductModel extends Product {
       'costHistory': costHistory
           .map((item) => ProductCostModel.fromEntity(item).toMap())
           .toList(growable: false),
-      'expirationDate': expirationDate.toIso8601String(),
+      if (expirationDate != null)
+        'expirationDate': expirationDate!.toIso8601String(),
     };
   }
 }

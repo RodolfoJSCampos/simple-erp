@@ -9,6 +9,9 @@ class FirestoreOrderRepository implements OrderRepository {
   FirestoreOrderRepository(this._firestore);
 
   final fs.FirebaseFirestore _firestore;
+  static const Duration _cacheTtl = Duration(minutes: 5);
+  final Map<String, OrderOrigin> _originCache = <String, OrderOrigin>{};
+  DateTime? _originCacheAt;
 
   fs.CollectionReference<Map<String, dynamic>> get _orders =>
       _firestore.collection('orders');
@@ -36,6 +39,15 @@ class FirestoreOrderRepository implements OrderRepository {
 
   @override
   Future<List<OrderOrigin>> listOrigins() async {
+    final now = DateTime.now();
+    final hasFreshCache =
+        _originCacheAt != null && now.difference(_originCacheAt!) <= _cacheTtl;
+    if (_originCache.isNotEmpty && hasFreshCache) {
+      final cached = _originCache.values.toList(growable: false)
+        ..sort((a, b) => a.name.compareTo(b.name));
+      return cached;
+    }
+
     final snapshot = await _origins.get();
     final origins =
         snapshot.docs
@@ -52,6 +64,11 @@ class FirestoreOrderRepository implements OrderRepository {
             .toList(growable: false)
           ..sort((a, b) => a.name.compareTo(b.name));
 
+    _originCache
+      ..clear()
+      ..addEntries(origins.map((o) => MapEntry(o.name, o)));
+    _originCacheAt = now;
+
     return origins;
   }
 
@@ -61,11 +78,22 @@ class FirestoreOrderRepository implements OrderRepository {
     if (normalized.isEmpty) {
       return;
     }
+
+    if (_originCache.containsKey(normalized)) {
+      return;
+    }
+
     await _origins.doc(normalized).set({
       'name': normalized,
       if (origin.iconUrl != null && origin.iconUrl!.isNotEmpty)
         'iconUrl': origin.iconUrl,
     }, fs.SetOptions(merge: true));
+
+    _originCache[normalized] = OrderOrigin(
+      name: normalized,
+      iconUrl: origin.iconUrl?.isEmpty == true ? null : origin.iconUrl,
+    );
+    _originCacheAt = DateTime.now();
   }
 
   @override

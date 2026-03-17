@@ -9,6 +9,9 @@ class FirestoreProductRepository implements ProductRepository {
   FirestoreProductRepository(this._firestore);
 
   final FirebaseFirestore _firestore;
+  static const Duration _cacheTtl = Duration(minutes: 5);
+  final Set<String> _brandCache = <String>{};
+  DateTime? _brandCacheAt;
 
   CollectionReference<Map<String, dynamic>> get _products =>
       _firestore.collection('products');
@@ -23,7 +26,15 @@ class FirestoreProductRepository implements ProductRepository {
       return;
     }
 
-    await _brands.doc(normalized).set({'name': normalized});
+    if (_brandCache.contains(normalized)) {
+      return;
+    }
+
+    await _brands.doc(normalized).set({
+      'name': normalized,
+    }, SetOptions(merge: true));
+    _brandCache.add(normalized);
+    _brandCacheAt = DateTime.now();
   }
 
   @override
@@ -51,6 +62,14 @@ class FirestoreProductRepository implements ProductRepository {
 
   @override
   Future<List<String>> listBrands() async {
+    final now = DateTime.now();
+    final hasFreshCache =
+        _brandCacheAt != null && now.difference(_brandCacheAt!) <= _cacheTtl;
+    if (_brandCache.isNotEmpty && hasFreshCache) {
+      final cached = _brandCache.toList(growable: false)..sort();
+      return cached;
+    }
+
     final snapshot = await _brands.get();
     final brands =
         snapshot.docs
@@ -58,6 +77,11 @@ class FirestoreProductRepository implements ProductRepository {
             .where((name) => name.isNotEmpty)
             .toList(growable: false)
           ..sort();
+
+    _brandCache
+      ..clear()
+      ..addAll(brands);
+    _brandCacheAt = now;
 
     return brands;
   }

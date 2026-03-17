@@ -8,7 +8,7 @@ class Product {
     required this.stock,
     required this.brand,
     required this.costHistory,
-    required this.expirationDate,
+    this.expirationDate,
   });
 
   final String sku;
@@ -17,7 +17,7 @@ class Product {
   final int stock;
   final String brand;
   final List<ProductCost> costHistory;
-  final DateTime expirationDate;
+  final DateTime? expirationDate;
 
   Product copyWith({
     String? sku,
