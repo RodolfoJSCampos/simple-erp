@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,11 +14,8 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
 
-  bool _isRegistering = false;
   bool _obscurePassword = true;
-  bool _obscureConfirm = true;
   bool _loading = false;
   bool _rememberMe = true;
   String? _errorMessage;
@@ -26,7 +24,6 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -45,22 +42,124 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
 
-      if (_isRegistering) {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
-      } else {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
-      }
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _mapError(e.code));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _showRegisterInfo() {
+    const developerEmail = 'rodolfojscampos@gmail.com';
+    final scheme = Theme.of(context).colorScheme;
+    final messenger = ScaffoldMessenger.of(context);
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.person_add_alt_1_rounded,
+                color: scheme.onPrimaryContainer,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Cadastro por solicitacao',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Para cadastrar um novo usuario, envie uma solicitacao para o desenvolvedor.',
+              style: Theme.of(dialogContext).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Material(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () async {
+                  await Clipboard.setData(
+                    const ClipboardData(text: developerEmail),
+                  );
+                  if (!dialogContext.mounted) return;
+                  Navigator.of(dialogContext).pop();
+                  messenger.hideCurrentSnackBar();
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'E-mail copiado para a area de transferencia.',
+                      ),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.email_outlined,
+                        size: 18,
+                        color: scheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            developerEmail,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: Theme.of(dialogContext).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Fechar'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _mapError(String code) {
@@ -117,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _isRegistering ? 'Crie sua conta' : 'Bem-vindo de volta',
+                  'Bem-vindo de volta',
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(color: scheme.outline),
@@ -166,12 +265,8 @@ class _LoginPageState extends State<LoginPage> {
                           TextFormField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
-                            textInputAction: _isRegistering
-                                ? TextInputAction.next
-                                : TextInputAction.done,
-                            onFieldSubmitted: _isRegistering
-                                ? null
-                                : (_) => _submit(),
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _submit(),
                             decoration: InputDecoration(
                               labelText: 'Senha',
                               prefixIcon: const Icon(Icons.lock_outline),
@@ -193,48 +288,9 @@ class _LoginPageState extends State<LoginPage> {
                               if (value == null || value.isEmpty) {
                                 return 'Informe a senha';
                               }
-                              if (_isRegistering && value.length < 6) {
-                                return 'Minimo 6 caracteres';
-                              }
                               return null;
                             },
                           ),
-                          // Confirmar senha (só no cadastro)
-                          if (_isRegistering) ...[
-                            const SizedBox(height: 14),
-                            TextFormField(
-                              controller: _confirmPasswordController,
-                              obscureText: _obscureConfirm,
-                              textInputAction: TextInputAction.done,
-                              onFieldSubmitted: (_) => _submit(),
-                              decoration: InputDecoration(
-                                labelText: 'Confirmar senha',
-                                prefixIcon: const Icon(Icons.lock_outline),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _obscureConfirm
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
-                                  ),
-                                  onPressed: () => setState(
-                                    () => _obscureConfirm = !_obscureConfirm,
-                                  ),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Confirme a senha';
-                                }
-                                if (value != _passwordController.text) {
-                                  return 'As senhas nao coincidem';
-                                }
-                                return null;
-                              },
-                            ),
-                          ],
                           // Mensagem de erro
                           if (_errorMessage != null) ...[
                             const SizedBox(height: 14),
@@ -270,37 +326,36 @@ class _LoginPageState extends State<LoginPage> {
                           ],
                           const SizedBox(height: 12),
                           // Manter-se conectado
-                          if (!_isRegistering)
-                            InkWell(
-                              borderRadius: BorderRadius.circular(8),
-                              onTap: () =>
-                                  setState(() => _rememberMe = !_rememberMe),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 4,
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: Checkbox(
-                                        value: _rememberMe,
-                                        onChanged: (v) => setState(
-                                          () => _rememberMe = v ?? true,
-                                        ),
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                        visualDensity: VisualDensity.compact,
+                          InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () =>
+                                setState(() => _rememberMe = !_rememberMe),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 4,
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: Checkbox(
+                                      value: _rememberMe,
+                                      onChanged: (v) => setState(
+                                        () => _rememberMe = v ?? true,
                                       ),
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
                                     ),
-                                    const SizedBox(width: 8),
-                                    const Text('Manter-me conectado'),
-                                  ],
-                                ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text('Manter-me conectado'),
+                                ],
                               ),
                             ),
+                          ),
                           const SizedBox(height: 16),
                           // Botão principal
                           FilledButton(
@@ -321,7 +376,7 @@ class _LoginPageState extends State<LoginPage> {
                                     ),
                                   )
                                 : Text(
-                                    _isRegistering ? 'Criar conta' : 'Entrar',
+                                    'Entrar',
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
@@ -339,21 +394,12 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      _isRegistering
-                          ? 'Ja tem uma conta?'
-                          : 'Nao tem uma conta?',
+                      'Nao tem uma conta?',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _isRegistering = !_isRegistering;
-                          _errorMessage = null;
-                          _formKey.currentState?.reset();
-                          _confirmPasswordController.clear();
-                        });
-                      },
-                      child: Text(_isRegistering ? 'Fazer login' : 'Cadastrar'),
+                      onPressed: _showRegisterInfo,
+                      child: const Text('Cadastrar'),
                     ),
                   ],
                 ),
