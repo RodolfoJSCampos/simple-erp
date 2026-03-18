@@ -1,5 +1,6 @@
 import '../../domain/entities/product.dart';
 import '../../domain/entities/product_cost.dart';
+import '../../domain/entities/product_page.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../models/product_model.dart';
 import '../../../shared/data/datasources/in_memory_erp_datasource.dart';
@@ -47,6 +48,32 @@ class ProductRepositoryImpl implements ProductRepository {
     return _dataSource.products.values
         .map(ProductModel.fromMap)
         .toList(growable: false);
+  }
+
+  @override
+  Future<ProductPage> listProductsPage({
+    required int limit,
+    String? afterSku,
+  }) async {
+    final skus = _dataSource.products.keys.toList(growable: false)..sort();
+    final startIndex = afterSku == null || afterSku.isEmpty
+        ? 0
+        : skus.indexOf(afterSku) + 1;
+
+    final safeStart = startIndex < 0 ? 0 : startIndex;
+    final endIndex = safeStart + limit > skus.length
+        ? skus.length
+        : safeStart + limit;
+    final selectedSkus = skus.sublist(safeStart, endIndex);
+
+    final items = selectedSkus
+        .map((sku) => ProductModel.fromMap(_dataSource.products[sku]!))
+        .toList(growable: false);
+    final nextCursor = endIndex >= skus.length || items.isEmpty
+        ? null
+        : selectedSkus.last;
+
+    return ProductPage(items: items, nextCursor: nextCursor);
   }
 
   @override

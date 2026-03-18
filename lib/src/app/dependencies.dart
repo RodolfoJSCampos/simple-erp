@@ -7,6 +7,7 @@ import '../features/order/domain/usecases/add_origin.dart';
 import '../features/order/domain/usecases/delete_order.dart';
 import '../features/order/domain/usecases/list_origins.dart';
 import '../features/order/domain/usecases/list_orders.dart';
+import '../features/order/domain/usecases/list_orders_page.dart';
 import '../features/order/presentation/controllers/order_controller.dart';
 import '../features/product/data/repositories/firestore_product_repository.dart';
 import '../features/product/data/repositories/product_repository_impl.dart';
@@ -15,6 +16,7 @@ import '../features/product/domain/usecases/create_product.dart';
 import '../features/product/domain/usecases/delete_product.dart';
 import '../features/product/domain/usecases/list_brands.dart';
 import '../features/product/domain/usecases/list_products.dart';
+import '../features/product/domain/usecases/list_products_page.dart';
 import '../features/product/domain/usecases/register_product_cost.dart';
 import '../features/product/domain/usecases/update_product_expiration.dart';
 import '../features/product/domain/usecases/update_product_stock.dart';
@@ -51,6 +53,7 @@ class AppDependencies {
     final productController = ProductController(
       createProduct: CreateProduct(productRepository),
       listProducts: ListProducts(productRepository),
+      listProductsPage: ListProductsPage(productRepository),
       listBrands: ListBrands(productRepository),
       addBrand: AddBrand(productRepository),
       deleteProduct: DeleteProduct(productRepository),
@@ -62,6 +65,7 @@ class AppDependencies {
     final orderController = OrderController(
       createOrder: CreateOrder(orderRepository),
       listOrders: ListOrders(orderRepository),
+      listOrdersPage: ListOrdersPage(orderRepository),
       listOrigins: ListOrigins(orderRepository),
       addOrigin: AddOrigin(orderRepository),
       deleteOrder: DeleteOrder(orderRepository),

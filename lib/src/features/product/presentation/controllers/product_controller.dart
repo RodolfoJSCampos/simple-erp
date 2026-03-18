@@ -1,11 +1,13 @@
 import '../../../../core/usecases/usecase.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/entities/product_cost.dart';
+import '../../domain/entities/product_page.dart';
 import '../../domain/usecases/add_brand.dart';
 import '../../domain/usecases/create_product.dart';
 import '../../domain/usecases/delete_product.dart';
 import '../../domain/usecases/list_brands.dart';
 import '../../domain/usecases/list_products.dart';
+import '../../domain/usecases/list_products_page.dart';
 import '../../domain/usecases/register_product_cost.dart';
 import '../../domain/usecases/update_product_expiration.dart';
 import '../../domain/usecases/update_product_stock.dart';
@@ -14,6 +16,7 @@ class ProductController {
   ProductController({
     required CreateProduct createProduct,
     required ListProducts listProducts,
+    required ListProductsPage listProductsPage,
     required ListBrands listBrands,
     required AddBrand addBrand,
     required DeleteProduct deleteProduct,
@@ -22,6 +25,7 @@ class ProductController {
     required UpdateProductStock updateProductStock,
   }) : _createProduct = createProduct,
        _listProducts = listProducts,
+       _listProductsPage = listProductsPage,
        _listBrands = listBrands,
        _addBrand = addBrand,
        _deleteProduct = deleteProduct,
@@ -31,6 +35,7 @@ class ProductController {
 
   final CreateProduct _createProduct;
   final ListProducts _listProducts;
+  final ListProductsPage _listProductsPage;
   final ListBrands _listBrands;
   final AddBrand _addBrand;
   final DeleteProduct _deleteProduct;
@@ -41,6 +46,12 @@ class ProductController {
   Future<void> create(Product product) => _createProduct(product);
 
   Future<List<Product>> list() => _listProducts(const NoParams());
+
+  Future<ProductPage> listPage({required int limit, String? afterSku}) {
+    return _listProductsPage(
+      ListProductsPageParams(limit: limit, afterSku: afterSku),
+    );
+  }
 
   Future<List<String>> listBrands() => _listBrands(const NoParams());
 

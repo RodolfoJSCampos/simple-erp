@@ -1,4 +1,5 @@
 import '../../domain/entities/order.dart';
+import '../../domain/entities/order_page.dart';
 import '../../domain/entities/order_origin.dart';
 import '../../domain/repositories/order_repository.dart';
 import '../models/order_model.dart';
@@ -8,6 +9,7 @@ class OrderRepositoryImpl implements OrderRepository {
   OrderRepositoryImpl(this._dataSource);
 
   final InMemoryErpDataSource _dataSource;
+  static const String _cursorSeparator = '|';
 
   @override
   Future<Order?> findById(String id) async {
@@ -24,6 +26,54 @@ class OrderRepositoryImpl implements OrderRepository {
     return _dataSource.orders.values
         .map(OrderModel.fromMap)
         .toList(growable: false);
+  }
+
+  @override
+  Future<OrderPage> listOrdersPage({
+    required int limit,
+    String? afterCursor,
+  }) async {
+    final ordered =
+        _dataSource.orders.values
+            .map(OrderModel.fromMap)
+            .toList(growable: false)
+          ..sort((a, b) {
+            final byDate = b.registeredAt.compareTo(a.registeredAt);
+            if (byDate != 0) {
+              return byDate;
+            }
+            return b.id.compareTo(a.id);
+          });
+
+    var startIndex = 0;
+    if (afterCursor != null && afterCursor.isNotEmpty) {
+      final parts = afterCursor.split(_cursorSeparator);
+      if (parts.length == 2) {
+        final cursorDate = DateTime.tryParse(parts[0]);
+        final cursorId = parts[1];
+        if (cursorDate != null) {
+          startIndex =
+              ordered.indexWhere(
+                (o) =>
+                    o.registeredAt.toIso8601String() ==
+                        cursorDate.toIso8601String() &&
+                    o.id == cursorId,
+              ) +
+              1;
+        }
+      }
+    }
+
+    final safeStart = startIndex < 0 ? 0 : startIndex;
+    final endIndex = safeStart + limit > ordered.length
+        ? ordered.length
+        : safeStart + limit;
+    final items = ordered.sublist(safeStart, endIndex);
+    final nextCursor = endIndex >= ordered.length || items.isEmpty
+        ? null
+        : '${items.last.registeredAt.toIso8601String()}$_cursorSeparator${items.last.id}';
+
+    return OrderPage(items: items, nextCursor: nextCursor);
   }
 
   @override

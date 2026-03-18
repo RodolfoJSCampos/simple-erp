@@ -39,7 +39,8 @@ class ProductModel extends Product {
       stock: map['stock'] as int,
       brand: map['brand'] as String,
       costHistory: costs,
-      expirationDate: rawExpirationDate is String && rawExpirationDate.isNotEmpty
+      expirationDate:
+          rawExpirationDate is String && rawExpirationDate.isNotEmpty
           ? DateTime.parse(rawExpirationDate)
           : null,
     );

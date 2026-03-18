@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../domain/entities/product.dart';
 import '../../domain/entities/product_cost.dart';
+import '../../domain/entities/product_page.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../models/product_model.dart';
 
@@ -92,6 +93,28 @@ class FirestoreProductRepository implements ProductRepository {
     return snapshot.docs
         .map((doc) => ProductModel.fromMap(doc.data()))
         .toList(growable: false);
+  }
+
+  @override
+  Future<ProductPage> listProductsPage({
+    required int limit,
+    String? afterSku,
+  }) async {
+    var query = _products.orderBy(FieldPath.documentId).limit(limit);
+
+    if (afterSku != null && afterSku.isNotEmpty) {
+      query = query.startAfter([afterSku]);
+    }
+
+    final snapshot = await query.get();
+    final items = snapshot.docs
+        .map((doc) => ProductModel.fromMap(doc.data()))
+        .toList(growable: false);
+    final nextCursor = snapshot.docs.length < limit
+        ? null
+        : snapshot.docs.last.id;
+
+    return ProductPage(items: items, nextCursor: nextCursor);
   }
 
   @override

@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart' as fs;
 
 import '../../domain/entities/order.dart';
+import '../../domain/entities/order_page.dart';
 import '../../domain/entities/order_origin.dart';
 import '../../domain/repositories/order_repository.dart';
 import '../models/order_model.dart';
 
 class FirestoreOrderRepository implements OrderRepository {
+  static const String _cursorSeparator = '|';
+
   FirestoreOrderRepository(this._firestore);
 
   final fs.FirebaseFirestore _firestore;
@@ -35,6 +38,38 @@ class FirestoreOrderRepository implements OrderRepository {
     return snapshot.docs
         .map((doc) => OrderModel.fromMap(doc.data()))
         .toList(growable: false);
+  }
+
+  @override
+  Future<OrderPage> listOrdersPage({
+    required int limit,
+    String? afterCursor,
+  }) async {
+    var query = _orders
+        .orderBy('registeredAt', descending: true)
+        .orderBy(fs.FieldPath.documentId, descending: true)
+        .limit(limit);
+
+    if (afterCursor != null && afterCursor.isNotEmpty) {
+      final cursorParts = afterCursor.split(_cursorSeparator);
+      if (cursorParts.length == 2) {
+        query = query.startAfter([cursorParts[0], cursorParts[1]]);
+      }
+    }
+
+    final snapshot = await query.get();
+    final items = snapshot.docs
+        .map((doc) => OrderModel.fromMap(doc.data()))
+        .toList(growable: false);
+
+    String? nextCursor;
+    if (snapshot.docs.length == limit && snapshot.docs.isNotEmpty) {
+      final lastDoc = snapshot.docs.last;
+      final registeredAt = (lastDoc.data()['registeredAt'] as String?) ?? '';
+      nextCursor = '$registeredAt$_cursorSeparator${lastDoc.id}';
+    }
+
+    return OrderPage(items: items, nextCursor: nextCursor);
   }
 
   @override

@@ -30,12 +30,20 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   static const String _allBrandsLabel = 'Todas as marcas';
   static const String _allOriginsLabel = 'Todas as origens';
+  static const int _productsPageSize = 60;
+  static const int _ordersPageSize = 60;
 
   int _selectedIndex = 1;
   List<Product> _products = const [];
   List<Order> _orders = const [];
   bool _loadingProducts = true;
   bool _loadingOrders = true;
+  bool _loadingMoreProducts = false;
+  bool _loadingMoreOrders = false;
+  String? _nextProductCursor;
+  String? _nextOrderCursor;
+  bool _hasMoreProducts = true;
+  bool _hasMoreOrders = true;
   bool _editModeEnabled = false;
   bool _showAdvancedProductFilters = false;
   bool _showAdvancedOrderFilters = false;
@@ -44,6 +52,7 @@ class _DashboardPageState extends State<DashboardPage> {
   _ExpirationFilter _expirationFilter = _ExpirationFilter.all;
   _ProductSortOrder _sortOrder = _ProductSortOrder.expiration;
   bool _sortAscending = true;
+  bool _showOutOfStockProducts = false;
   String _orderSearchQuery = '';
   String _selectedOriginFilter = _allOriginsLabel;
 
@@ -59,13 +68,18 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _loadProducts() async {
     setState(() => _loadingProducts = true);
-    final products = await widget.productController.list();
+    final page = await widget.productController.listPage(
+      limit: _productsPageSize,
+    );
     if (!mounted) {
       return;
     }
     setState(() {
-      _products = products;
+      _products = page.items;
+      _nextProductCursor = page.nextCursor;
+      _hasMoreProducts = page.nextCursor != null;
       _loadingProducts = false;
+      _loadingMoreProducts = false;
       final brands = _availableBrands;
       if (_selectedBrandFilter != _allBrandsLabel &&
           !brands.contains(_selectedBrandFilter)) {
@@ -76,19 +90,101 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _loadOrders() async {
     setState(() => _loadingOrders = true);
-    final orders = await widget.orderController.list();
+    final page = await widget.orderController.listPage(limit: _ordersPageSize);
     if (!mounted) {
       return;
     }
     setState(() {
-      _orders = orders;
+      _orders = page.items;
+      _nextOrderCursor = page.nextCursor;
+      _hasMoreOrders = page.nextCursor != null;
       _loadingOrders = false;
+      _loadingMoreOrders = false;
       final origins = _availableOrigins;
       if (_selectedOriginFilter != _allOriginsLabel &&
           !origins.contains(_selectedOriginFilter)) {
         _selectedOriginFilter = _allOriginsLabel;
       }
     });
+  }
+
+  Future<void> _loadMoreProducts() async {
+    if (_loadingMoreProducts ||
+        !_hasMoreProducts ||
+        _nextProductCursor == null) {
+      return;
+    }
+
+    setState(() => _loadingMoreProducts = true);
+    try {
+      final page = await widget.productController.listPage(
+        limit: _productsPageSize,
+        afterSku: _nextProductCursor,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        final existingSkus = _products.map((p) => p.sku).toSet();
+        final newItems = page.items
+            .where((product) => !existingSkus.contains(product.sku))
+            .toList(growable: false);
+        _products = [..._products, ...newItems];
+        _nextProductCursor = page.nextCursor;
+        _hasMoreProducts = page.nextCursor != null;
+
+        final brands = _availableBrands;
+        if (_selectedBrandFilter != _allBrandsLabel &&
+            !brands.contains(_selectedBrandFilter)) {
+          _selectedBrandFilter = _allBrandsLabel;
+        }
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loadingMoreProducts = false);
+      }
+    }
+  }
+
+  Future<void> _loadMoreOrders() async {
+    if (_loadingMoreOrders || !_hasMoreOrders || _nextOrderCursor == null) {
+      return;
+    }
+
+    setState(() => _loadingMoreOrders = true);
+    try {
+      final page = await widget.orderController.listPage(
+        limit: _ordersPageSize,
+        afterCursor: _nextOrderCursor,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        final existingIds = _orders.map((o) => o.id).toSet();
+        final newItems = page.items
+            .where((order) => !existingIds.contains(order.id))
+            .toList(growable: false);
+        _orders = [..._orders, ...newItems]
+          ..sort((a, b) => b.registeredAt.compareTo(a.registeredAt));
+        _nextOrderCursor = page.nextCursor;
+        _hasMoreOrders = page.nextCursor != null;
+
+        final origins = _availableOrigins;
+        if (_selectedOriginFilter != _allOriginsLabel &&
+            !origins.contains(_selectedOriginFilter)) {
+          _selectedOriginFilter = _allOriginsLabel;
+        }
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loadingMoreOrders = false);
+      }
+    }
   }
 
   Future<void> _onAddActionPressed() async {
@@ -99,10 +195,26 @@ class _DashboardPageState extends State<DashboardPage> {
     await _showCreateOrderDialog();
   }
 
-  Future<void> _showCreateProductDialog() async {
+  void _upsertProductInState(Product product) {
+    final existingIndex = _products.indexWhere((p) => p.sku == product.sku);
+    if (existingIndex < 0) {
+      setState(() {
+        _products = [..._products, product];
+      });
+      return;
+    }
+
+    final updated = [..._products];
+    updated[existingIndex] = product;
+    setState(() {
+      _products = updated;
+    });
+  }
+
+  Future<Product?> _showCreateProductDialog() async {
     final brands = await widget.productController.listBrands();
     if (!mounted) {
-      return;
+      return null;
     }
     final formData = await showDialog<_ProductFormData>(
       context: context,
@@ -110,7 +222,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
 
     if (formData == null) {
-      return;
+      return null;
     }
 
     final sku = await _generateUniqueSku(formData.description);
@@ -122,18 +234,18 @@ class _DashboardPageState extends State<DashboardPage> {
       stock: formData.stock,
       brand: formData.brand,
       costHistory: const [],
-      expirationDate: formData.expirationDate,
+      expirationDate: formData.stock <= 0 ? null : formData.expirationDate,
     );
 
     await widget.productController.create(product);
-    await _loadProducts();
-
     if (!mounted) {
-      return;
+      return product;
     }
+    _upsertProductInState(product);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Produto adicionado com sucesso.')),
     );
+    return product;
   }
 
   Future<void> _showManualStockUpdateDialog(Product product) async {
@@ -146,15 +258,26 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
-    await widget.productController.updateStock(
-      sku: product.sku,
-      newStock: newStock,
-    );
-    await _loadProducts();
-
-    if (!mounted) {
-      return;
+    final shouldClearExpiration =
+        newStock <= 0 && product.expirationDate != null;
+    if (shouldClearExpiration) {
+      final updated = product.copyWith(stock: newStock, expirationDate: null);
+      await widget.productController.create(updated);
+      if (!mounted) {
+        return;
+      }
+      _upsertProductInState(updated);
+    } else {
+      await widget.productController.updateStock(
+        sku: product.sku,
+        newStock: newStock,
+      );
+      if (!mounted) {
+        return;
+      }
+      _upsertProductInState(product.copyWith(stock: newStock));
     }
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Estoque atualizado com sucesso.')),
     );
@@ -174,7 +297,11 @@ class _DashboardPageState extends State<DashboardPage> {
       sku: product.sku,
       newExpirationDate: newDate,
     );
-    await _loadProducts();
+
+    if (!mounted) {
+      return;
+    }
+    _upsertProductInState(product.copyWith(expirationDate: newDate));
 
     if (!mounted) {
       return;
@@ -208,15 +335,15 @@ class _DashboardPageState extends State<DashboardPage> {
       imageUrl: formData.imageUrl,
       stock: formData.stock,
       brand: formData.brand,
-      expirationDate: formData.expirationDate,
+      expirationDate: formData.stock <= 0 ? null : formData.expirationDate,
     );
 
     await widget.productController.create(updated);
-    await _loadProducts();
 
     if (!mounted) {
       return;
     }
+    _upsertProductInState(updated);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Produto atualizado com sucesso.')),
     );
@@ -247,7 +374,21 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     await widget.productController.delete(product.sku);
-    await _loadProducts();
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _products = _products
+          .where((p) => p.sku != product.sku)
+          .toList(growable: false);
+
+      final brands = _availableBrands;
+      if (_selectedBrandFilter != _allBrandsLabel &&
+          !brands.contains(_selectedBrandFilter)) {
+        _selectedBrandFilter = _allBrandsLabel;
+      }
+    });
 
     if (!mounted) {
       return;
@@ -270,6 +411,7 @@ class _DashboardPageState extends State<DashboardPage> {
         origins: origins,
         initialOrder: order,
         isEditing: true,
+        onAddProductRequested: _showCreateProductDialog,
       ),
     );
 
@@ -295,7 +437,22 @@ class _DashboardPageState extends State<DashboardPage> {
     );
 
     await widget.orderController.create(updatedOrder);
-    await _loadOrders();
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      final index = _orders.indexWhere((o) => o.id == updatedOrder.id);
+      if (index < 0) {
+        _orders = [..._orders, updatedOrder]
+          ..sort((a, b) => b.registeredAt.compareTo(a.registeredAt));
+      } else {
+        final updated = [..._orders];
+        updated[index] = updatedOrder;
+        updated.sort((a, b) => b.registeredAt.compareTo(a.registeredAt));
+        _orders = updated;
+      }
+    });
 
     if (!mounted) {
       return;
@@ -330,7 +487,19 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     await widget.orderController.delete(order.id);
-    await _loadOrders();
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _orders = _orders.where((o) => o.id != order.id).toList(growable: false);
+
+      final origins = _availableOrigins;
+      if (_selectedOriginFilter != _allOriginsLabel &&
+          !origins.contains(_selectedOriginFilter)) {
+        _selectedOriginFilter = _allOriginsLabel;
+      }
+    });
 
     if (!mounted) {
       return;
@@ -357,8 +526,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final formData = await showDialog<_OrderFormData>(
       context: context,
-      builder: (context) =>
-          _CreateOrderDialog(products: _products, origins: origins),
+      builder: (context) => _CreateOrderDialog(
+        products: _products,
+        origins: origins,
+        onAddProductRequested: _showCreateProductDialog,
+      ),
     );
 
     if (formData == null) {
@@ -414,6 +586,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     final productUpdateFutures = <Future<void>>[];
+    final updatedProductsBySku = <String, Product>{};
     for (final entry in quantityBySku.entries) {
       final currentProduct = productsBySku[entry.key];
       if (currentProduct == null) {
@@ -422,7 +595,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
       final nearestExpiration = minExpirationBySku[currentProduct.sku];
       final currentExpiration = currentProduct.expirationDate;
-      final newExpirationDate = switch ((currentExpiration, nearestExpiration)) {
+      final wasOutOfStock = currentProduct.stock <= 0;
+      final newExpirationDate = switch ((
+        currentExpiration,
+        nearestExpiration,
+      )) {
+        (_, final DateTime nearest) when wasOutOfStock => nearest,
         (null, final DateTime nearest) => nearest,
         (final DateTime current, final DateTime nearest) =>
           nearest.isBefore(current) ? nearest : current,
@@ -437,17 +615,32 @@ class _DashboardPageState extends State<DashboardPage> {
           ...?costsBySku[currentProduct.sku],
         ],
       );
+      updatedProductsBySku[currentProduct.sku] = updatedProduct;
 
       productUpdateFutures.add(widget.productController.create(updatedProduct));
     }
 
     await Future.wait(productUpdateFutures);
 
-    await _reloadData();
-
     if (!mounted) {
       return;
     }
+
+    setState(() {
+      _orders = [..._orders, order]
+        ..sort((a, b) => b.registeredAt.compareTo(a.registeredAt));
+      _products = [
+        for (final product in _products)
+          updatedProductsBySku[product.sku] ?? product,
+      ];
+
+      final brands = _availableBrands;
+      if (_selectedBrandFilter != _allBrandsLabel &&
+          !brands.contains(_selectedBrandFilter)) {
+        _selectedBrandFilter = _allBrandsLabel;
+      }
+    });
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Pedido adicionado com sucesso.')),
     );
@@ -463,12 +656,15 @@ class _DashboardPageState extends State<DashboardPage> {
         .substring(0, 6);
 
     final random = Random();
-    final existingSkus = (await widget.productController.list())
-        .map((product) => product.sku)
-        .toSet();
+    final existingSkus = _products.map((product) => product.sku).toSet();
 
     for (var attempt = 0; attempt < 10000; attempt++) {
-      final suffix = random.nextInt(10000).toString().padLeft(4, '0');
+      final timeSalt = DateTime.now().microsecondsSinceEpoch % 1000000;
+      final randomSalt = random.nextInt(1000);
+      final suffix = ((timeSalt + randomSalt) % 1000000).toString().padLeft(
+        6,
+        '0',
+      );
       final candidate = '$prefix$suffix';
       if (!existingSkus.contains(candidate)) {
         return candidate;
@@ -506,6 +702,9 @@ class _DashboardPageState extends State<DashboardPage> {
                   product.description.toLowerCase().contains(normalizedQuery) ||
                   product.sku.toLowerCase().contains(normalizedQuery);
 
+              final matchesStockVisibility =
+                  _showOutOfStockProducts || product.stock > 0;
+
               final expirationDate = product.expirationDate;
               final date = expirationDate == null
                   ? null
@@ -533,7 +732,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   date != null && date.isBefore(today),
               };
 
-              return matchesBrand && matchesQuery && matchesExpiration;
+              return matchesBrand &&
+                  matchesQuery &&
+                  matchesStockVisibility &&
+                  matchesExpiration;
             })
             .toList(growable: false)
           ..sort((a, b) {
@@ -585,7 +787,8 @@ class _DashboardPageState extends State<DashboardPage> {
     return _selectedBrandFilter != _allBrandsLabel ||
         _expirationFilter != _ExpirationFilter.all ||
         _sortOrder != _ProductSortOrder.expiration ||
-        !_sortAscending;
+        !_sortAscending ||
+        _showOutOfStockProducts;
   }
 
   int get _activeAdvancedProductFilterCount {
@@ -599,6 +802,9 @@ class _DashboardPageState extends State<DashboardPage> {
     if (_sortOrder != _ProductSortOrder.expiration || !_sortAscending) {
       count++;
     }
+    if (_showOutOfStockProducts) {
+      count++;
+    }
     return count;
   }
 
@@ -608,15 +814,8 @@ class _DashboardPageState extends State<DashboardPage> {
       _expirationFilter = _ExpirationFilter.all;
       _sortOrder = _ProductSortOrder.expiration;
       _sortAscending = true;
+      _showOutOfStockProducts = false;
     });
-  }
-
-  String get _sortOrderLabel {
-    return switch (_sortOrder) {
-      _ProductSortOrder.alphabetical => 'Alfabético',
-      _ProductSortOrder.expiration => 'Validade',
-      _ProductSortOrder.stock => 'Estoque',
-    };
   }
 
   bool get _hasActiveAdvancedOrderFilters {
@@ -917,32 +1116,54 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                           if (_showAdvancedProductFilters) ...[
                             const SizedBox(height: 10),
-                            if (_hasActiveAdvancedProductFilters)
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.outlineVariant,
+                                ),
+                              ),
+                              child: Row(
                                 children: [
-                                  _QuickStatChip(
-                                    icon: Icons.filter_alt_outlined,
-                                    label:
-                                        '$_activeAdvancedProductFilterCount filtro(s) ativo(s)',
+                                  Icon(
+                                    Icons.inventory_2_outlined,
+                                    size: 16,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outline,
                                   ),
-                                  if (_selectedBrandFilter != _allBrandsLabel)
-                                    _QuickStatChip(
-                                      icon: Icons.sell_outlined,
-                                      label: _selectedBrandFilter,
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Exibir zerados',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelLarge,
                                     ),
-                                  if (_sortOrder !=
-                                          _ProductSortOrder.expiration ||
-                                      !_sortAscending)
-                                    _QuickStatChip(
-                                      icon: _sortAscending
-                                          ? Icons.arrow_upward
-                                          : Icons.arrow_downward,
-                                      label: _sortOrderLabel,
+                                  ),
+                                  Transform.scale(
+                                    scale: 0.85,
+                                    child: Switch.adaptive(
+                                      value: _showOutOfStockProducts,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _showOutOfStockProducts = value;
+                                        });
+                                      },
                                     ),
+                                  ),
                                 ],
                               ),
+                            ),
+                            const SizedBox(height: 10),
                             if (_hasActiveAdvancedProductFilters)
                               const SizedBox(height: 10),
                             if (isWide)
@@ -1015,12 +1236,34 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             if (_hasActiveAdvancedProductFilters) ...[
                               const SizedBox(height: 10),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: _clearAdvancedProductFilters,
-                                  icon: const Icon(Icons.clear, size: 16),
-                                  label: const Text('Limpar filtros'),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _QuickStatChip(
+                                        icon: Icons.filter_alt_outlined,
+                                        label:
+                                            '$_activeAdvancedProductFilterCount filtro(s) ativo(s)',
+                                        minHeight: 40,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        height: 40,
+                                        child: OutlinedButton.icon(
+                                          onPressed:
+                                              _clearAdvancedProductFilters,
+                                          icon: const Icon(
+                                            Icons.clear,
+                                            size: 16,
+                                          ),
+                                          label: const Text('Limpar filtros'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
@@ -1155,26 +1398,6 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                       if (_showAdvancedOrderFilters) ...[
                         const SizedBox(height: 10),
-                        if (_hasActiveAdvancedOrderFilters)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                _QuickStatChip(
-                                  icon: Icons.filter_alt_outlined,
-                                  label:
-                                      '$_activeAdvancedOrderFilterCount filtro(s) ativo(s)',
-                                ),
-                                ActionChip(
-                                  avatar: const Icon(Icons.clear, size: 16),
-                                  label: const Text('Limpar filtros'),
-                                  onPressed: _clearAdvancedOrderFilters,
-                                ),
-                              ],
-                            ),
-                          ),
                         DropdownButtonFormField<String>(
                           initialValue: _selectedOriginFilter,
                           decoration: InputDecoration(
@@ -1213,6 +1436,35 @@ class _DashboardPageState extends State<DashboardPage> {
                             setState(() => _selectedOriginFilter = value);
                           },
                         ),
+                        if (_hasActiveAdvancedOrderFilters) ...[
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _QuickStatChip(
+                                    icon: Icons.filter_alt_outlined,
+                                    label:
+                                        '$_activeAdvancedOrderFilterCount filtro(s) ativo(s)',
+                                    minHeight: 40,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  SizedBox(
+                                    height: 40,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _clearAdvancedOrderFilters,
+                                      icon: const Icon(Icons.clear, size: 16),
+                                      label: const Text('Limpar filtros'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ],
                   ),
@@ -1226,6 +1478,9 @@ class _DashboardPageState extends State<DashboardPage> {
                     products: _filteredProducts,
                     orders: _orders,
                     isLoading: _loadingProducts,
+                    isLoadingMore: _loadingMoreProducts,
+                    canLoadMore: _hasMoreProducts,
+                    onLoadMore: _loadMoreProducts,
                     onUpdateStock: _showManualStockUpdateDialog,
                     onUpdateExpirationDate: _showManualExpirationUpdateDialog,
                     isEditModeEnabled: _editModeEnabled,
@@ -1240,6 +1495,9 @@ class _DashboardPageState extends State<DashboardPage> {
                     orders: _filteredOrders,
                     products: _products,
                     isLoading: _loadingOrders,
+                    isLoadingMore: _loadingMoreOrders,
+                    canLoadMore: _hasMoreOrders,
+                    onLoadMore: _loadMoreOrders,
                     isEditModeEnabled: _editModeEnabled,
                     onEditOrder: _showEditOrderDialog,
                     onDeleteOrder: _deleteOrder,
@@ -1369,6 +1627,9 @@ class _ProductsListTab extends StatelessWidget {
     required this.products,
     required this.orders,
     required this.isLoading,
+    required this.isLoadingMore,
+    required this.canLoadMore,
+    required this.onLoadMore,
     required this.onUpdateStock,
     required this.onUpdateExpirationDate,
     required this.isEditModeEnabled,
@@ -1380,6 +1641,9 @@ class _ProductsListTab extends StatelessWidget {
   final List<Product> products;
   final List<Order> orders;
   final bool isLoading;
+  final bool isLoadingMore;
+  final bool canLoadMore;
+  final Future<void> Function() onLoadMore;
   final Future<void> Function(Product product) onUpdateStock;
   final Future<void> Function(Product product) onUpdateExpirationDate;
   final bool isEditModeEnabled;
@@ -1402,11 +1666,22 @@ class _ProductsListTab extends StatelessWidget {
       );
     }
 
+    final showFooter = isLoadingMore || canLoadMore;
+
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      itemCount: products.length,
+      itemCount: products.length + (showFooter ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 6),
       itemBuilder: (context, index) {
+        if (index == products.length) {
+          return _LoadMoreFooter(
+            isLoadingMore: isLoadingMore,
+            canLoadMore: canLoadMore,
+            onLoadMore: onLoadMore,
+            label: 'Carregar mais produtos',
+          );
+        }
+
         final product = products[index];
         return _ProductCard(
           product: product,
@@ -1446,7 +1721,11 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = _expirationStatus(product.expirationDate, context);
+    final status = _expirationStatus(
+      product.expirationDate,
+      product.stock,
+      context,
+    );
     final scheme = Theme.of(context).colorScheme;
     final isOutOfStock = product.stock <= 0;
 
@@ -1683,6 +1962,9 @@ class _OrdersListTab extends StatelessWidget {
     required this.orders,
     required this.products,
     required this.isLoading,
+    required this.isLoadingMore,
+    required this.canLoadMore,
+    required this.onLoadMore,
     required this.isEditModeEnabled,
     required this.onEditOrder,
     required this.onDeleteOrder,
@@ -1692,6 +1974,9 @@ class _OrdersListTab extends StatelessWidget {
   final List<Order> orders;
   final List<Product> products;
   final bool isLoading;
+  final bool isLoadingMore;
+  final bool canLoadMore;
+  final Future<void> Function() onLoadMore;
   final bool isEditModeEnabled;
   final Future<void> Function(Order order) onEditOrder;
   final Future<void> Function(Order order) onDeleteOrder;
@@ -1712,11 +1997,22 @@ class _OrdersListTab extends StatelessWidget {
       );
     }
 
+    final showFooter = isLoadingMore || canLoadMore;
+
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      itemCount: orders.length,
+      itemCount: orders.length + (showFooter ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
+        if (index == orders.length) {
+          return _LoadMoreFooter(
+            isLoadingMore: isLoadingMore,
+            canLoadMore: canLoadMore,
+            onLoadMore: onLoadMore,
+            label: 'Carregar mais pedidos',
+          );
+        }
+
         final order = orders[index];
         final totalItems = order.items.fold<int>(
           0,
@@ -1939,18 +2235,22 @@ class _PriceCalculatorTab extends StatefulWidget {
 }
 
 class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
-  static const double _defaultIfoodRate = 0.12;
-  static const double _defaultPaymentRate = 0.032;
-  static const double _defaultOperationFixed = 2;
+  static const double _defaultIfoodRate = _calculatorDefaultIfoodRate;
+  static const double _defaultPaymentRate = _calculatorDefaultPaymentRate;
+  static const double _defaultOperationFixed = _calculatorDefaultOperationFixed;
+  static const double _defaultMarginPercent = _calculatorDefaultMarginPercent;
 
-  static const String _ifoodRateKey = 'calculator_ifood_rate';
-  static const String _paymentRateKey = 'calculator_payment_rate';
-  static const String _operationFixedKey = 'calculator_operation_fixed';
+  static const String _ifoodRateKey = _calculatorIfoodRateKey;
+  static const String _paymentRateKey = _calculatorPaymentRateKey;
+  static const String _operationFixedKey = _calculatorOperationFixedKey;
+  static const String _marginKey = _calculatorMarginKey;
 
   static const double _operationReferencePrice = 20;
 
   final _costController = TextEditingController();
-  final _marginController = TextEditingController(text: '20');
+  final _marginController = TextEditingController(
+    text: _defaultMarginPercent.toStringAsFixed(0),
+  );
   double _ifoodRate = _defaultIfoodRate;
   double _paymentRate = _defaultPaymentRate;
   double _operationFixed = _defaultOperationFixed;
@@ -1979,6 +2279,13 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
       _paymentRate = prefs.getDouble(_paymentRateKey) ?? _defaultPaymentRate;
       _operationFixed =
           prefs.getDouble(_operationFixedKey) ?? _defaultOperationFixed;
+      final savedMargin = prefs.getDouble(_marginKey) ?? _defaultMarginPercent;
+      final marginDisplay = savedMargin % 1 == 0
+          ? savedMargin.toStringAsFixed(0)
+          : savedMargin.toStringAsFixed(1);
+      _marginController
+        ..text = marginDisplay
+        ..selection = TextSelection.collapsed(offset: marginDisplay.length);
     });
   }
 
@@ -1987,6 +2294,15 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
     await prefs.setDouble(_ifoodRateKey, _ifoodRate);
     await prefs.setDouble(_paymentRateKey, _paymentRate);
     await prefs.setDouble(_operationFixedKey, _operationFixed);
+    await prefs.setDouble(
+      _marginKey,
+      _parseDecimal(_marginController.text).clamp(0, 99.9).toDouble(),
+    );
+  }
+
+  void _onMarginChanged() {
+    setState(() {});
+    _persistCalculatorSettings();
   }
 
   Future<double?> _showRateDialog({
@@ -2124,6 +2440,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
       ..selection = TextSelection.collapsed(offset: display.length);
 
     setState(() {});
+    _persistCalculatorSettings();
   }
 
   @override
@@ -2382,7 +2699,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      onChanged: (_) => setState(() {}),
+                      onChanged: (_) => _onMarginChanged(),
                       textAlign: TextAlign.center,
                       decoration: InputDecoration(
                         labelText: 'Margem %',
@@ -2762,321 +3079,399 @@ class _ProductOrderHistoryDialog extends StatelessWidget {
     }
 
     entries.sort((a, b) => b.registeredAt.compareTo(a.registeredAt));
-    final now = DateTime.now();
-    final sixMonthsAgo = DateTime(now.year, now.month - 6, now.day);
-    final recentEntries = entries
-        .where((entry) => !entry.registeredAt.isBefore(sixMonthsAgo))
-        .toList(growable: false);
-    final lowestRecentUnitCost = recentEntries.isEmpty
-        ? null
-        : recentEntries
-              .map((entry) => entry.costPerItem)
-              .reduce((a, b) => min(a, b));
-    final averageRecentUnitCost = recentEntries.isEmpty
-        ? null
-        : recentEntries.fold<double>(
-                0,
-                (sum, entry) => sum + entry.costPerItem,
-              ) /
-              recentEntries.length;
-    final lastRecentUnitCost = recentEntries.isEmpty
-        ? null
-        : (recentEntries
-                ..sort((a, b) => b.registeredAt.compareTo(a.registeredAt)))
-              .first
-              .costPerItem;
+    var selectedWindow = _CostHistoryWindow.sixMonths;
 
-    return AlertDialog(
-      insetPadding: _dialogInsetPadding(context),
-      titlePadding: EdgeInsets.zero,
-      contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      content: SizedBox(
-        width: _dialogMaxWidth(context, 560),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-              ),
-              child: Row(
-                children: [
-                  _ProductImagePreview(imageUrl: product.imageUrl),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          product.description,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${product.sku} · ${product.brand}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            if (entries.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final chips = [
-                      _CompactMetricChip(
-                        icon: Icons.south_outlined,
-                        title: 'Menor (6m)',
-                        value: lowestRecentUnitCost == null
-                            ? '--'
-                            : 'R\$ ${lowestRecentUnitCost.toStringAsFixed(2)}',
-                        expand: true,
-                      ),
-                      _CompactMetricChip(
-                        icon: Icons.trending_flat_outlined,
-                        title: 'Medio (6m)',
-                        value: averageRecentUnitCost == null
-                            ? '--'
-                            : 'R\$ ${averageRecentUnitCost.toStringAsFixed(2)}',
-                        highlighted: true,
-                        expand: true,
-                      ),
-                      _CompactMetricChip(
-                        icon: Icons.history_outlined,
-                        title: 'Ultimo (6m)',
-                        value: lastRecentUnitCost == null
-                            ? '--'
-                            : 'R\$ ${lastRecentUnitCost.toStringAsFixed(2)}',
-                        expand: true,
-                      ),
-                    ];
+    return FutureBuilder<_CalculatorPricingConfig>(
+      future: _loadCalculatorPricingConfig(),
+      builder: (context, pricingSnapshot) {
+        final pricingConfig =
+            pricingSnapshot.data ??
+            const _CalculatorPricingConfig(
+              ifoodRate: _calculatorDefaultIfoodRate,
+              paymentRate: _calculatorDefaultPaymentRate,
+              operationFixed: _calculatorDefaultOperationFixed,
+              marginPercent: _calculatorDefaultMarginPercent,
+            );
 
-                    if (constraints.maxWidth < 440) {
-                      return Column(
-                        children: [
-                          chips[0],
-                          const SizedBox(height: 6),
-                          chips[1],
-                          const SizedBox(height: 6),
-                          chips[2],
-                        ],
-                      );
-                    }
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final now = DateTime.now();
+            final filteredEntries = _entriesForCostWindow(
+              entries,
+              selectedWindow,
+              now,
+            );
+            final lowestUnitCost = filteredEntries.isEmpty
+                ? null
+                : filteredEntries
+                      .map((entry) => entry.costPerItem)
+                      .reduce((a, b) => min(a, b));
+            final averageUnitCost = filteredEntries.isEmpty
+                ? null
+                : filteredEntries.fold<double>(
+                        0,
+                        (sum, entry) => sum + entry.costPerItem,
+                      ) /
+                      filteredEntries.length;
+            final lastUnitCost = filteredEntries.isEmpty
+                ? null
+                : filteredEntries.first.costPerItem;
 
-                    return Row(
-                      children: [
-                        Expanded(child: chips[0]),
-                        const SizedBox(width: 6),
-                        Expanded(child: chips[1]),
-                        const SizedBox(width: 6),
-                        Expanded(child: chips[2]),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 10),
-            Flexible(
-              child: entries.isEmpty
-                  ? Container(
-                      padding: const EdgeInsets.all(14),
+            return AlertDialog(
+              insetPadding: _dialogInsetPadding(context),
+              titlePadding: EdgeInsets.zero,
+              contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              content: SizedBox(
+                width: _dialogMaxWidth(context, 560),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: Theme.of(
                           context,
                         ).colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
                       ),
-                      child: const Text(
-                        'Este produto ainda nao foi incluido em pedidos.',
-                      ),
-                    )
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: entries.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 4),
-                      itemBuilder: (context, index) {
-                        final entry = entries[index];
-                        final selectedOrder = ordersById[entry.orderId];
-                        return Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: !enableItemTap || selectedOrder == null
-                                ? null
-                                : () {
-                                    showDialog<void>(
-                                      context: context,
-                                      builder: (_) => _OrderItemsDialog(
-                                        order: selectedOrder,
-                                        products: products,
-                                        orders: orders,
-                                        enableItemTap: false,
-                                      ),
-                                    );
-                                  },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.outlineVariant,
+                      child: Row(
+                        children: [
+                          _ProductImagePreview(imageUrl: product.imageUrl),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  product.description,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.w700),
                                 ),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _OriginIcon(
-                                    iconUrl: entry.originIconUrl,
-                                    size: 30,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                entry.origin,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelMedium
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                    ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 3,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.tertiaryContainer,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: Text(
-                                                'R\$ ${entry.costPerItem.toStringAsFixed(2)}/un',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelMedium
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w900,
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onTertiaryContainer,
-                                                    ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          '${entry.orderId}  •  ${_formatDate(entry.registeredAt)}',
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.labelSmall,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.inventory_2_outlined,
-                                              size: 13,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.outline,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '${entry.quantity} un',
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.labelSmall,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Icon(
-                                              Icons.summarize_outlined,
-                                              size: 13,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.outline,
-                                            ),
-                                            const SizedBox(width: 2),
-                                            Text(
-                                              'Total R\$ ${entry.lineTotal.toStringAsFixed(2)}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall
-                                                  ?.copyWith(
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${product.sku} · ${product.brand}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
                             ),
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Fechar'),
-        ),
-      ],
+                    const SizedBox(height: 10),
+                    if (entries.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          for (final option in _CostHistoryWindow.values) ...[
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 2,
+                                ),
+                                child: _CostWindowButton(
+                                  label: option.label,
+                                  selected: selectedWindow == option,
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      selectedWindow = option;
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            _CompactMetricChip(
+                              title: 'Menor',
+                              value: lowestUnitCost == null
+                                  ? '--'
+                                  : 'R\$ ${lowestUnitCost.toStringAsFixed(2)}',
+                              secondaryValue: lowestUnitCost == null
+                                  ? null
+                                  : 'R\$ ${_calculateSuggestedPriceFromCost(lowestUnitCost, pricingConfig).toStringAsFixed(2)}',
+                              valueIcon: Icons.receipt_long_outlined,
+                              secondaryValueIcon: Icons.sell_outlined,
+                              expand: true,
+                            ),
+                            const SizedBox(height: 6),
+                            _CompactMetricChip(
+                              title: 'Medio',
+                              value: averageUnitCost == null
+                                  ? '--'
+                                  : 'R\$ ${averageUnitCost.toStringAsFixed(2)}',
+                              secondaryValue: averageUnitCost == null
+                                  ? null
+                                  : 'R\$ ${_calculateSuggestedPriceFromCost(averageUnitCost, pricingConfig).toStringAsFixed(2)}',
+                              valueIcon: Icons.receipt_long_outlined,
+                              secondaryValueIcon: Icons.sell_outlined,
+                              highlighted: true,
+                              expand: true,
+                            ),
+                            const SizedBox(height: 6),
+                            _CompactMetricChip(
+                              title: 'Ultimo',
+                              value: lastUnitCost == null
+                                  ? '--'
+                                  : 'R\$ ${lastUnitCost.toStringAsFixed(2)}',
+                              secondaryValue: lastUnitCost == null
+                                  ? null
+                                  : 'R\$ ${_calculateSuggestedPriceFromCost(lastUnitCost, pricingConfig).toStringAsFixed(2)}',
+                              valueIcon: Icons.receipt_long_outlined,
+                              secondaryValueIcon: Icons.sell_outlined,
+                              expand: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Flexible(
+                      child: entries.isEmpty
+                          ? Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Text(
+                                'Este produto ainda nao foi incluido em pedidos.',
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: entries.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 4),
+                              itemBuilder: (context, index) {
+                                final entry = entries[index];
+                                final selectedOrder = ordersById[entry.orderId];
+                                return Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(10),
+                                    onTap:
+                                        !enableItemTap || selectedOrder == null
+                                        ? null
+                                        : () {
+                                            showDialog<void>(
+                                              context: context,
+                                              builder: (_) => _OrderItemsDialog(
+                                                order: selectedOrder,
+                                                products: products,
+                                                orders: orders,
+                                                enableItemTap: false,
+                                              ),
+                                            );
+                                          },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          _OriginIcon(
+                                            iconUrl: entry.originIconUrl,
+                                            size: 30,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        entry.origin,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .labelMedium
+                                                            ?.copyWith(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Wrap(
+                                                      spacing: 6,
+                                                      runSpacing: 4,
+                                                      crossAxisAlignment:
+                                                          WrapCrossAlignment
+                                                              .center,
+                                                      children: [
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 3,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: Theme.of(context)
+                                                                .colorScheme
+                                                                .tertiaryContainer,
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  8,
+                                                                ),
+                                                          ),
+                                                          child: Text(
+                                                            'R\$ ${entry.costPerItem.toStringAsFixed(2)}/un',
+                                                            style: Theme.of(context)
+                                                                .textTheme
+                                                                .labelMedium
+                                                                ?.copyWith(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w900,
+                                                                  color: Theme.of(
+                                                                    context,
+                                                                  ).colorScheme.onTertiaryContainer,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '${entry.orderId}  •  ${_formatDate(entry.registeredAt)}',
+                                                  style: Theme.of(
+                                                    context,
+                                                  ).textTheme.labelSmall,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons
+                                                          .inventory_2_outlined,
+                                                      size: 13,
+                                                      color: Theme.of(
+                                                        context,
+                                                      ).colorScheme.outline,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      '${entry.quantity} un',
+                                                      style: Theme.of(
+                                                        context,
+                                                      ).textTheme.labelSmall,
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Icon(
+                                                      Icons.summarize_outlined,
+                                                      size: 13,
+                                                      color: Theme.of(
+                                                        context,
+                                                      ).colorScheme.outline,
+                                                    ),
+                                                    const SizedBox(width: 2),
+                                                    Text(
+                                                      'Total R\$ ${entry.lineTotal.toStringAsFixed(2)}',
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .labelSmall
+                                                          ?.copyWith(
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Fechar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
+}
+
+List<_ProductOrderEntry> _entriesForCostWindow(
+  List<_ProductOrderEntry> entries,
+  _CostHistoryWindow window,
+  DateTime now,
+) {
+  if (window == _CostHistoryWindow.all) {
+    return entries;
+  }
+
+  final months = switch (window) {
+    _CostHistoryWindow.oneMonth => 1,
+    _CostHistoryWindow.threeMonths => 3,
+    _CostHistoryWindow.sixMonths => 6,
+    _CostHistoryWindow.oneYear => 12,
+    _CostHistoryWindow.all => 0,
+  };
+  final start = DateTime(now.year, now.month - months, now.day);
+  return entries
+      .where((entry) => !entry.registeredAt.isBefore(start))
+      .toList(growable: false);
 }
 
 class _OrderItemsDialog extends StatelessWidget {
@@ -3705,7 +4100,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
                 ),
                 ButtonSegment<bool>(
                   value: true,
-                  label: Text('Nova marca'),
+                  label: Text('Nova'),
                   icon: Icon(Icons.add_outlined),
                 ),
               ],
@@ -4276,12 +4671,14 @@ class _CreateOrderDialog extends StatefulWidget {
   const _CreateOrderDialog({
     required this.products,
     required this.origins,
+    required this.onAddProductRequested,
     this.initialOrder,
     this.isEditing = false,
   });
 
   final List<Product> products;
   final List<OrderOrigin> origins;
+  final Future<Product?> Function() onAddProductRequested;
   final Order? initialOrder;
   final bool isEditing;
 
@@ -4296,14 +4693,16 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
   final _newOriginController = TextEditingController();
   final _newOriginIconController = TextEditingController();
   final List<_OrderItemDraft> _itemDrafts = [];
+  late List<Product> _products;
   late bool _createNewOrigin;
   OrderOrigin? _selectedOrigin;
 
   @override
   void initState() {
     super.initState();
+    _products = [...widget.products];
     _createNewOrigin = widget.origins.isEmpty;
-    _selectedOrigin = widget.origins.isNotEmpty ? widget.origins.first : null;
+    _selectedOrigin = null;
 
     final initialOrder = widget.initialOrder;
     if (initialOrder != null) {
@@ -4573,9 +4972,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
     final isPlaceholderSelected = draft.productSku == _productPlaceholderSku;
     Product? selectedProduct;
     try {
-      selectedProduct = widget.products.firstWhere(
-        (p) => p.sku == draft.productSku,
-      );
+      selectedProduct = _products.firstWhere((p) => p.sku == draft.productSku);
     } catch (_) {
       selectedProduct = null;
     }
@@ -4663,15 +5060,33 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
     final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) => _ProductSelectionDialog(
-        products: widget.products,
+        products: _products,
         selectedSku: _itemDrafts[itemIndex].productSku,
         excludeSkus: selectedSkus,
+        onAddProductRequested: _handleAddProductFromSelection,
       ),
     );
 
     if (result != null) {
       setState(() => _itemDrafts[itemIndex].productSku = result);
     }
+  }
+
+  Future<Product?> _handleAddProductFromSelection() async {
+    final created = await widget.onAddProductRequested();
+    if (created == null) {
+      return null;
+    }
+
+    if (_products.any((product) => product.sku == created.sku)) {
+      return created;
+    }
+
+    setState(() {
+      _products = [..._products, created];
+    });
+
+    return created;
   }
 
   Widget _buildItemsSection(BuildContext context, bool isWide) {
@@ -5307,11 +5722,13 @@ class _ProductSelectionDialog extends StatefulWidget {
     required this.products,
     required this.selectedSku,
     required this.excludeSkus,
+    required this.onAddProductRequested,
   });
 
   final List<Product> products;
   final String selectedSku;
   final Set<String> excludeSkus;
+  final Future<Product?> Function() onAddProductRequested;
 
   @override
   State<_ProductSelectionDialog> createState() =>
@@ -5321,10 +5738,12 @@ class _ProductSelectionDialog extends StatefulWidget {
 class _ProductSelectionDialogState extends State<_ProductSelectionDialog> {
   late TextEditingController _filterController;
   late List<Product> _filteredProducts;
+  late List<Product> _products;
 
   @override
   void initState() {
     super.initState();
+    _products = [...widget.products];
     _filterController = TextEditingController();
     _updateFilteredProducts();
   }
@@ -5337,7 +5756,7 @@ class _ProductSelectionDialogState extends State<_ProductSelectionDialog> {
 
   void _updateFilteredProducts() {
     final query = _filterController.text.toLowerCase().trim();
-    _filteredProducts = widget.products
+    _filteredProducts = _products
         .where(
           (product) =>
               !widget.excludeSkus.contains(product.sku) &&
@@ -5347,6 +5766,21 @@ class _ProductSelectionDialogState extends State<_ProductSelectionDialog> {
                   product.brand.toLowerCase().contains(query)),
         )
         .toList();
+  }
+
+  Future<void> _onAddProductPressed() async {
+    final created = await widget.onAddProductRequested();
+    if (!mounted) {
+      return;
+    }
+
+    if (created != null && !_products.any((p) => p.sku == created.sku)) {
+      _products = [..._products, created];
+    }
+
+    setState(() {
+      _updateFilteredProducts();
+    });
   }
 
   @override
@@ -5369,6 +5803,15 @@ class _ProductSelectionDialogState extends State<_ProductSelectionDialog> {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _onAddProductPressed,
+                    icon: const Icon(Icons.add_circle_outline),
+                    label: const Text('Adicionar novo produto'),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: _filterController,
                   decoration: InputDecoration(
@@ -5528,6 +5971,84 @@ class _ProductSelectionDialogState extends State<_ProductSelectionDialog> {
   }
 }
 
+const double _calculatorDefaultIfoodRate = 0.12;
+const double _calculatorDefaultPaymentRate = 0.032;
+const double _calculatorDefaultOperationFixed = 2;
+const double _calculatorDefaultMarginPercent = 20;
+const String _calculatorIfoodRateKey = 'calculator_ifood_rate';
+const String _calculatorPaymentRateKey = 'calculator_payment_rate';
+const String _calculatorOperationFixedKey = 'calculator_operation_fixed';
+const String _calculatorMarginKey = 'calculator_margin_percent';
+
+class _CalculatorPricingConfig {
+  const _CalculatorPricingConfig({
+    required this.ifoodRate,
+    required this.paymentRate,
+    required this.operationFixed,
+    required this.marginPercent,
+  });
+
+  final double ifoodRate;
+  final double paymentRate;
+  final double operationFixed;
+  final double marginPercent;
+}
+
+Future<_CalculatorPricingConfig> _loadCalculatorPricingConfig() async {
+  final prefs = await SharedPreferences.getInstance();
+  return _CalculatorPricingConfig(
+    ifoodRate:
+        prefs.getDouble(_calculatorIfoodRateKey) ?? _calculatorDefaultIfoodRate,
+    paymentRate:
+        prefs.getDouble(_calculatorPaymentRateKey) ??
+        _calculatorDefaultPaymentRate,
+    operationFixed:
+        prefs.getDouble(_calculatorOperationFixedKey) ??
+        _calculatorDefaultOperationFixed,
+    marginPercent:
+        prefs.getDouble(_calculatorMarginKey) ??
+        _calculatorDefaultMarginPercent,
+  );
+}
+
+double _calculateSuggestedPriceFromCost(
+  double cost,
+  _CalculatorPricingConfig config,
+) {
+  if (cost <= 0 || config.operationFixed < 0) {
+    return 0;
+  }
+
+  const operationReferencePrice = 20.0;
+  final marginRate = (config.marginPercent / 100).clamp(0, 0.999).toDouble();
+  final baseDenominator =
+      1 - (marginRate + config.ifoodRate + config.paymentRate);
+  final lowPriceDenominator =
+      baseDenominator - (config.operationFixed / operationReferencePrice);
+
+  final lowCandidate = lowPriceDenominator > 0
+      ? (cost / lowPriceDenominator)
+      : -1.0;
+  final highCandidate = baseDenominator > 0
+      ? ((cost + config.operationFixed) / baseDenominator)
+      : -1.0;
+
+  if (lowCandidate > 0 && lowCandidate < operationReferencePrice) {
+    return lowCandidate;
+  }
+  if (highCandidate > 0 && highCandidate >= operationReferencePrice) {
+    return highCandidate;
+  }
+  if (highCandidate > 0) {
+    return highCandidate;
+  }
+  if (lowCandidate > 0) {
+    return lowCandidate;
+  }
+
+  return 0;
+}
+
 String _formatDate(DateTime date) {
   final day = date.day.toString().padLeft(2, '0');
   final month = date.month.toString().padLeft(2, '0');
@@ -5544,10 +6065,21 @@ String? _required(String? value, String fieldName) {
 
 _ExpirationStatus _expirationStatus(
   DateTime? expirationDate,
+  int stock,
   BuildContext context,
 ) {
+  if (stock <= 0) {
+    return _ExpirationStatus(
+      'Estoque zerado',
+      Theme.of(context).colorScheme.outline,
+    );
+  }
+
   if (expirationDate == null) {
-    return _ExpirationStatus('Sem validade', Theme.of(context).colorScheme.outline);
+    return _ExpirationStatus(
+      'Sem validade',
+      Theme.of(context).colorScheme.outline,
+    );
   }
 
   final today = DateTime.now();
@@ -5609,6 +6141,40 @@ class _EmptyState extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _LoadMoreFooter extends StatelessWidget {
+  const _LoadMoreFooter({
+    required this.isLoadingMore,
+    required this.canLoadMore,
+    required this.onLoadMore,
+    required this.label,
+  });
+
+  final bool isLoadingMore;
+  final bool canLoadMore;
+  final Future<void> Function() onLoadMore;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Center(
+        child: isLoadingMore
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              )
+            : OutlinedButton.icon(
+                onPressed: canLoadMore ? onLoadMore : null,
+                icon: const Icon(Icons.expand_more, size: 16),
+                label: Text(label),
+              ),
       ),
     );
   }
@@ -5684,6 +6250,17 @@ enum _ExpirationFilter { all, warning, expired }
 
 enum _ProductSortOrder { alphabetical, expiration, stock }
 
+enum _CostHistoryWindow {
+  oneMonth('1 mes'),
+  threeMonths('3 meses'),
+  sixMonths('6 meses'),
+  oneYear('1 ano'),
+  all('Tudo');
+
+  const _CostHistoryWindow(this.label);
+  final String label;
+}
+
 double _dialogHorizontalInset(BuildContext context) {
   final width = MediaQuery.sizeOf(context).width;
   if (width < 420) {
@@ -5714,16 +6291,21 @@ class _QuickStatChip extends StatelessWidget {
     required this.icon,
     required this.label,
     this.expand = false,
+    this.minHeight,
   });
 
   final IconData icon;
   final String label;
   final bool expand;
+  final double? minHeight;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: expand ? double.infinity : null,
+      constraints: minHeight == null
+          ? null
+          : BoxConstraints(minHeight: minHeight!),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
@@ -5752,18 +6334,68 @@ class _QuickStatChip extends StatelessWidget {
   }
 }
 
+class _CostWindowButton extends StatelessWidget {
+  const _CostWindowButton({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 34,
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          side: BorderSide(
+            color: selected ? scheme.primary : scheme.outlineVariant,
+          ),
+          backgroundColor: selected
+              ? scheme.primaryContainer.withValues(alpha: 0.65)
+              : scheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        onPressed: onPressed,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+              color: selected ? scheme.primary : scheme.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CompactMetricChip extends StatelessWidget {
   const _CompactMetricChip({
-    required this.icon,
+    this.icon,
     required this.title,
     required this.value,
+    this.secondaryValue,
+    this.valueIcon,
+    this.secondaryValueIcon,
     this.highlighted = false,
     this.expand = false,
   });
 
-  final IconData icon;
+  final IconData? icon;
   final String title;
   final String value;
+  final String? secondaryValue;
+  final IconData? valueIcon;
+  final IconData? secondaryValueIcon;
   final bool highlighted;
   final bool expand;
 
@@ -5787,12 +6419,14 @@ class _CompactMetricChip extends StatelessWidget {
       child: Row(
         mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 13,
-            color: highlighted ? scheme.primary : scheme.outline,
-          ),
-          const SizedBox(width: 5),
+          if (icon != null) ...[
+            Icon(
+              icon,
+              size: 13,
+              color: highlighted ? scheme.primary : scheme.outline,
+            ),
+            const SizedBox(width: 5),
+          ],
           if (expand)
             Expanded(
               child: Text(
@@ -5814,11 +6448,80 @@ class _CompactMetricChip extends StatelessWidget {
               ).textTheme.labelSmall?.copyWith(color: scheme.outline),
             ),
           const SizedBox(width: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: highlighted ? scheme.primary : scheme.onSurface,
+          if (secondaryValue != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _MetricValueWithIcon(
+                  value: value,
+                  icon: valueIcon,
+                  highlighted: highlighted,
+                ),
+                const SizedBox(width: 8),
+                _MetricValueWithIcon(
+                  value: secondaryValue!,
+                  icon: secondaryValueIcon,
+                  highlighted: highlighted,
+                  subdued: true,
+                ),
+              ],
+            )
+          else
+            Text(
+              value,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: highlighted ? scheme.primary : scheme.onSurface,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricValueWithIcon extends StatelessWidget {
+  const _MetricValueWithIcon({
+    required this.value,
+    required this.highlighted,
+    this.icon,
+    this.subdued = false,
+  });
+
+  final String value;
+  final IconData? icon;
+  final bool highlighted;
+  final bool subdued;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final baseColor = highlighted ? scheme.primary : scheme.onSurface;
+    final valueColor = subdued
+        ? (highlighted
+              ? scheme.primary.withValues(alpha: 0.72)
+              : scheme.outline)
+        : baseColor;
+
+    return SizedBox(
+      width: 96,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: valueColor),
+            const SizedBox(width: 3),
+          ],
+          Flexible(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                fontWeight: subdued ? FontWeight.w600 : FontWeight.w800,
+                color: valueColor,
+              ),
             ),
           ),
         ],

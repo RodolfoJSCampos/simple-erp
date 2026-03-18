@@ -209,9 +209,7 @@ class _LoginPageState extends State<LoginPage> {
                               onFieldSubmitted: (_) => _submit(),
                               decoration: InputDecoration(
                                 labelText: 'Confirmar senha',
-                                prefixIcon: const Icon(
-                                  Icons.lock_outline,
-                                ),
+                                prefixIcon: const Icon(Icons.lock_outline),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -275,9 +273,8 @@ class _LoginPageState extends State<LoginPage> {
                           if (!_isRegistering)
                             InkWell(
                               borderRadius: BorderRadius.circular(8),
-                              onTap: () => setState(
-                                () => _rememberMe = !_rememberMe,
-                              ),
+                              onTap: () =>
+                                  setState(() => _rememberMe = !_rememberMe),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 4,

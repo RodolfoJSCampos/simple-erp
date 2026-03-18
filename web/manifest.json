@@ -1,6 +1,6 @@
 {
-    "name": "simple_erp",
-    "short_name": "simple_erp",
+    "name": "Simple ERP",
+    "short_name": "Simple ERP",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
