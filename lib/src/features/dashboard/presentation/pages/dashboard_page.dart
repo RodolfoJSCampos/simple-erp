@@ -905,9 +905,24 @@ class _DashboardPageState extends State<DashboardPage> {
     return Scaffold(
       backgroundColor: appBackgroundColor,
       appBar: AppBar(
-        backgroundColor: appBarBackgroundColor,
+        backgroundColor: appBarBackgroundColor ?? Colors.white,
         surfaceTintColor: Colors.transparent,
-        title: const Text('Simple ERP'),
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.all(Radius.circular(4)),
+              child: Image(
+                image: AssetImage('assets/app_icon/simple-erp-icon.png'),
+                width: 20,
+                height: 20,
+                fit: BoxFit.cover,
+              ),
+            ),
+            SizedBox(width: 8),
+            Text('Simple ERP'),
+          ],
+        ),
         actions: [
           if (canToggleEditMode)
             IconButton(

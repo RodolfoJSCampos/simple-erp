@@ -44,10 +44,11 @@ class _AppWidgetState extends State<AppWidget> {
       theme: ThemeData(
         colorScheme: colorScheme,
         useMaterial3: true,
-        scaffoldBackgroundColor: colorScheme.surface,
+        scaffoldBackgroundColor: Colors.white,
         appBarTheme: AppBarTheme(
-          backgroundColor: colorScheme.surface,
+          backgroundColor: Colors.white,
           foregroundColor: colorScheme.onSurface,
+          surfaceTintColor: Colors.transparent,
           elevation: 0,
           scrolledUnderElevation: 0,
         ),
@@ -244,10 +245,7 @@ class _SplashFrameState extends State<_SplashFrame>
         curve: const Interval(0.0, 0.75, curve: Curves.easeOutCubic),
       ),
     );
-    _orbitTurns = Tween<double>(
-      begin: 0,
-      end: 0.65,
-    ).animate(
+    _orbitTurns = Tween<double>(begin: 0, end: 0.65).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.05, 0.95, curve: Curves.easeOutCubic),

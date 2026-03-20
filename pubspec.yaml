@@ -57,8 +57,8 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: "assets/app_icon/simple-erp-icon.png"
-    background_color: "#F8FAFC"
-    theme_color: "#2563EB"
+    background_color: "#FFFFFF"
+    theme_color: "#FFFFFF"
   windows:
     generate: false
   macos:
@@ -74,6 +74,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/app_icon/simple-erp-icon.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
