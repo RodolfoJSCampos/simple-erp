@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 
@@ -1029,6 +1030,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                 child: SizedBox(
                                   height: 44,
                                   child: TextField(
+                                    scrollPadding: const EdgeInsets.fromLTRB(
+                                      20,
+                                      20,
+                                      20,
+                                      220,
+                                    ),
                                     onChanged: (value) {
                                       setState(() => _searchQuery = value);
                                     },
@@ -1311,6 +1318,12 @@ class _DashboardPageState extends State<DashboardPage> {
                             child: SizedBox(
                               height: 44,
                               child: TextField(
+                                scrollPadding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  20,
+                                  20,
+                                  220,
+                                ),
                                 onChanged: (value) {
                                   setState(() => _orderSearchQuery = value);
                                 },
@@ -2335,6 +2348,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
         insetPadding: _dialogInsetPadding(context),
         title: Text(title),
         content: TextField(
+          scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
           controller: controller,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -2403,6 +2417,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
         insetPadding: _dialogInsetPadding(context),
         title: const Text('Alterar operacao fixa'),
         content: TextField(
+          scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
           controller: controller,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -2692,6 +2707,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
                 builder: (context, constraints) {
                   final fields = [
                     TextField(
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                       controller: _costController,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
@@ -2710,6 +2726,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
                       ),
                     ),
                     TextField(
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                       controller: _marginController,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
@@ -3107,9 +3124,27 @@ class _ProductOrderHistoryDialog extends StatelessWidget {
               operationFixed: _calculatorDefaultOperationFixed,
               marginPercent: _calculatorDefaultMarginPercent,
             );
+        var dialogMarginPercent = pricingConfig.marginPercent
+            .clamp(0, 99.9)
+            .toDouble();
+        String formatMargin(double value) {
+          return value % 1 == 0
+              ? value.toStringAsFixed(0)
+              : value.toStringAsFixed(1);
+        }
+
+        final marginController = TextEditingController(
+          text: formatMargin(dialogMarginPercent),
+        );
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final activePricingConfig = _CalculatorPricingConfig(
+              ifoodRate: pricingConfig.ifoodRate,
+              paymentRate: pricingConfig.paymentRate,
+              operationFixed: pricingConfig.operationFixed,
+              marginPercent: dialogMarginPercent,
+            );
             final now = DateTime.now();
             final filteredEntries = _entriesForCostWindow(
               entries,
@@ -3224,7 +3259,7 @@ class _ProductOrderHistoryDialog extends StatelessWidget {
                                   : 'R\$ ${lowestUnitCost.toStringAsFixed(2)}',
                               secondaryValue: lowestUnitCost == null
                                   ? null
-                                  : 'R\$ ${_calculateSuggestedPriceFromCost(lowestUnitCost, pricingConfig).toStringAsFixed(2)}',
+                                  : 'R\$ ${_calculateSuggestedPriceFromCost(lowestUnitCost, activePricingConfig).toStringAsFixed(2)}',
                               valueIcon: Icons.receipt_long_outlined,
                               secondaryValueIcon: Icons.sell_outlined,
                               expand: true,
@@ -3237,7 +3272,7 @@ class _ProductOrderHistoryDialog extends StatelessWidget {
                                   : 'R\$ ${averageUnitCost.toStringAsFixed(2)}',
                               secondaryValue: averageUnitCost == null
                                   ? null
-                                  : 'R\$ ${_calculateSuggestedPriceFromCost(averageUnitCost, pricingConfig).toStringAsFixed(2)}',
+                                  : 'R\$ ${_calculateSuggestedPriceFromCost(averageUnitCost, activePricingConfig).toStringAsFixed(2)}',
                               valueIcon: Icons.receipt_long_outlined,
                               secondaryValueIcon: Icons.sell_outlined,
                               highlighted: true,
@@ -3251,13 +3286,103 @@ class _ProductOrderHistoryDialog extends StatelessWidget {
                                   : 'R\$ ${lastUnitCost.toStringAsFixed(2)}',
                               secondaryValue: lastUnitCost == null
                                   ? null
-                                  : 'R\$ ${_calculateSuggestedPriceFromCost(lastUnitCost, pricingConfig).toStringAsFixed(2)}',
+                                  : 'R\$ ${_calculateSuggestedPriceFromCost(lastUnitCost, activePricingConfig).toStringAsFixed(2)}',
                               valueIcon: Icons.receipt_long_outlined,
                               secondaryValueIcon: Icons.sell_outlined,
                               expand: true,
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        scrollPadding: const EdgeInsets.fromLTRB(
+                          20,
+                          20,
+                          20,
+                          220,
+                        ),
+                        controller: marginController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textAlign: TextAlign.center,
+                        decoration: InputDecoration(
+                          labelText: 'Margem da calculadora %',
+                          filled: true,
+                          fillColor: Theme.of(context).colorScheme.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          isDense: true,
+                          prefixIcon: IconButton(
+                            onPressed: () {
+                              setDialogState(() {
+                                dialogMarginPercent = (dialogMarginPercent - 1)
+                                    .clamp(0, 99.9)
+                                    .toDouble();
+                                final display = formatMargin(
+                                  dialogMarginPercent,
+                                );
+                                marginController
+                                  ..text = display
+                                  ..selection = TextSelection.collapsed(
+                                    offset: display.length,
+                                  );
+                              });
+                              _persistCalculatorMarginPercent(
+                                dialogMarginPercent,
+                              );
+                            },
+                            tooltip: 'Diminuir margem',
+                            icon: const Icon(Icons.remove, size: 18),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setDialogState(() {
+                                dialogMarginPercent = (dialogMarginPercent + 1)
+                                    .clamp(0, 99.9)
+                                    .toDouble();
+                                final display = formatMargin(
+                                  dialogMarginPercent,
+                                );
+                                marginController
+                                  ..text = display
+                                  ..selection = TextSelection.collapsed(
+                                    offset: display.length,
+                                  );
+                              });
+                              _persistCalculatorMarginPercent(
+                                dialogMarginPercent,
+                              );
+                            },
+                            tooltip: 'Aumentar margem',
+                            icon: const Icon(Icons.add, size: 18),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                        onChanged: (value) {
+                          final parsed = double.tryParse(
+                            value.replaceAll(',', '.').trim(),
+                          )?.clamp(0, 99.9).toDouble();
+                          if (parsed == null) {
+                            return;
+                          }
+                          setDialogState(() {
+                            dialogMarginPercent = parsed;
+                          });
+                          _persistCalculatorMarginPercent(dialogMarginPercent);
+                        },
+                        onEditingComplete: () {
+                          final display = formatMargin(dialogMarginPercent);
+                          marginController
+                            ..text = display
+                            ..selection = TextSelection.collapsed(
+                              offset: display.length,
+                            );
+                          FocusScope.of(context).unfocus();
+                        },
                       ),
                     ],
                     const SizedBox(height: 10),
@@ -3775,7 +3900,8 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
   final _imageUrlController = TextEditingController();
-  final _stockController = TextEditingController(text: '0');
+  final _stockController = TextEditingController();
+  final _expirationDateController = TextEditingController();
   final _newBrandController = TextEditingController();
   late bool _createNewBrand;
   String? _selectedBrand;
@@ -3790,6 +3916,9 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
       _imageUrlController.text = initial.imageUrl;
       _stockController.text = initial.stock.toString();
       _expirationDate = initial.expirationDate;
+      _expirationDateController.text = initial.expirationDate == null
+          ? ''
+          : _formatDate(initial.expirationDate!);
     }
 
     _createNewBrand = widget.brands.isEmpty;
@@ -3811,6 +3940,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
     _descriptionController.dispose();
     _imageUrlController.dispose();
     _stockController.dispose();
+    _expirationDateController.dispose();
     _newBrandController.dispose();
     super.dispose();
   }
@@ -3902,6 +4032,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
             ),
             const SizedBox(height: 12),
             TextFormField(
+              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
               controller: _descriptionController,
               decoration: InputDecoration(
                 labelText: 'Descrição',
@@ -4007,6 +4138,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
             ),
             const SizedBox(height: 12),
             TextFormField(
+              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
               controller: _imageUrlController,
               decoration: InputDecoration(
                 labelText: 'URL da imagem',
@@ -4127,6 +4259,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
             const SizedBox(height: 12),
             if (_createNewBrand)
               TextFormField(
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                 controller: _newBrandController,
                 decoration: InputDecoration(
                   labelText: 'Nome da marca',
@@ -4217,6 +4350,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
                 children: [
                   Expanded(
                     child: TextFormField(
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                       controller: _stockController,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
@@ -4247,10 +4381,12 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
               Column(
                 children: [
                   TextFormField(
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                     controller: _stockController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       labelText: 'Quantidade',
+                      hintText: '0',
                       prefixIcon: const Icon(Icons.add_outlined),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -4279,62 +4415,70 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
   }
 
   Widget _buildDatePickerField(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _pickDate,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: _expirationDate == null
-                  ? Theme.of(context).colorScheme.outlineVariant
-                  : Theme.of(context).colorScheme.primary,
-              width: 2,
-            ),
-            borderRadius: BorderRadius.circular(12),
-            color: _expirationDate == null
-                ? Colors.transparent
-                : Theme.of(
-                    context,
-                  ).colorScheme.primaryContainer.withValues(alpha: 0.1),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.calendar_today_outlined,
-                color: _expirationDate == null
-                    ? Theme.of(context).colorScheme.outline
-                    : Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Validade',
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                    Text(
-                      _expirationDate == null
-                          ? 'Sem data definida'
-                          : _formatDate(_expirationDate!),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: _expirationDate == null
-                            ? Theme.of(context).colorScheme.outline
-                            : null,
-                      ),
-                    ),
-                  ],
+    final now = DateTime.now();
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: TextFormField(
+              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+              controller: _expirationDateController,
+              keyboardType: TextInputType.datetime,
+              inputFormatters: _dateInputFormatters(),
+              decoration: InputDecoration(
+                labelText: 'Validade',
+                hintText: 'dd/mm/aaaa',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                isDense: true,
               ),
-            ],
+              validator: (value) {
+                final text = value?.trim() ?? '';
+                if (text.isEmpty) {
+                  return null;
+                }
+                final parsed = _parseDateInput(
+                  text,
+                  minDate: DateTime(now.year, now.month, now.day),
+                  maxDate: DateTime(now.year + 20),
+                );
+                if (parsed == null) {
+                  return 'Use o formato dd/mm/aaaa';
+                }
+                return null;
+              },
+              onChanged: (value) {
+                final parsed = _parseDateInput(
+                  value,
+                  minDate: DateTime(now.year, now.month, now.day),
+                  maxDate: DateTime(now.year + 20),
+                );
+                _expirationDate = parsed;
+              },
+            ),
           ),
         ),
-      ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 48,
+          height: 48,
+          child: OutlinedButton(
+            onPressed: _pickDate,
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: Icon(
+              Icons.calendar_month_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -4347,7 +4491,10 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
       initialDate: _expirationDate ?? now,
     );
     if (picked != null) {
-      setState(() => _expirationDate = picked);
+      setState(() {
+        _expirationDate = picked;
+        _expirationDateController.text = _formatDate(picked);
+      });
     }
   }
 
@@ -4484,6 +4631,7 @@ class _UpdateStockDialogState extends State<_UpdateStockDialog> {
               ),
               const SizedBox(height: 12),
               TextFormField(
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                 controller: _stockController,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
@@ -4538,21 +4686,21 @@ class _UpdateExpirationDialog extends StatefulWidget {
 
 class _UpdateExpirationDialogState extends State<_UpdateExpirationDialog> {
   DateTime? _selectedDate;
+  late final TextEditingController _dateController;
 
   @override
   void initState() {
     super.initState();
     _selectedDate = widget.product.expirationDate;
+    _dateController = TextEditingController(
+      text: _selectedDate == null ? '' : _formatDate(_selectedDate!),
+    );
   }
 
-  void _applyQuickDate(int days) {
-    final baseDate = DateTime.now();
-    final candidate = DateTime(
-      baseDate.year,
-      baseDate.month,
-      baseDate.day,
-    ).add(Duration(days: days));
-    setState(() => _selectedDate = candidate);
+  @override
+  void dispose() {
+    _dateController.dispose();
+    super.dispose();
   }
 
   @override
@@ -4562,88 +4710,108 @@ class _UpdateExpirationDialogState extends State<_UpdateExpirationDialog> {
     return AlertDialog(
       insetPadding: _dialogInsetPadding(context),
       title: const Text('Atualizar validade'),
-      content: SizedBox(
-        width: _dialogMaxWidth(context, 460),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.product.description,
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: scheme.outlineVariant),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: _dialogMaxWidth(context, 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.product.description,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Validade atual',
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.product.expirationDate == null
-                        ? 'Sem data definida'
-                        : _formatDate(widget.product.expirationDate!),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Nova validade',
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _selectedDate == null
-                        ? 'Nao selecionada'
-                        : _formatDate(_selectedDate!),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: scheme.primary,
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: scheme.outlineVariant),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Validade atual',
+                      style: Theme.of(context).textTheme.labelMedium,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.product.expirationDate == null
+                          ? 'Sem data definida'
+                          : _formatDate(widget.product.expirationDate!),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Nova validade',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: TextField(
+                              scrollPadding: const EdgeInsets.fromLTRB(
+                                20,
+                                20,
+                                20,
+                                220,
+                              ),
+                              controller: _dateController,
+                              keyboardType: TextInputType.datetime,
+                              inputFormatters: _dateInputFormatters(),
+                              decoration: InputDecoration(
+                                hintText: 'dd/mm/aaaa',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                isDense: true,
+                              ),
+                              onChanged: (value) {
+                                final now = DateTime.now();
+                                setState(() {
+                                  _selectedDate = _parseDateInput(
+                                    value,
+                                    minDate: DateTime(now.year - 10),
+                                    maxDate: DateTime(now.year + 20),
+                                  );
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: OutlinedButton(
+                            onPressed: _pickDate,
+                            style: OutlinedButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.calendar_month_outlined,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton(
-                  onPressed: () => _applyQuickDate(7),
-                  child: const Text('+7 dias'),
-                ),
-                OutlinedButton(
-                  onPressed: () => _applyQuickDate(15),
-                  child: const Text('+15 dias'),
-                ),
-                OutlinedButton(
-                  onPressed: () => _applyQuickDate(30),
-                  child: const Text('+30 dias'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _pickDate,
-                icon: const Icon(Icons.calendar_month_outlined),
-                label: const Text('Selecionar no calendario'),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       actions: [
@@ -4653,6 +4821,22 @@ class _UpdateExpirationDialogState extends State<_UpdateExpirationDialog> {
         ),
         ElevatedButton(
           onPressed: () {
+            final now = DateTime.now();
+            final typedDate = _parseDateInput(
+              _dateController.text,
+              minDate: DateTime(now.year - 10),
+              maxDate: DateTime(now.year + 20),
+            );
+            if (_dateController.text.trim().isNotEmpty && typedDate == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Informe uma data valida no formato dd/mm/aaaa.',
+                  ),
+                ),
+              );
+              return;
+            }
             if (_selectedDate == null) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Selecione a nova validade.')),
@@ -4677,7 +4861,10 @@ class _UpdateExpirationDialogState extends State<_UpdateExpirationDialog> {
     );
 
     if (picked != null) {
-      setState(() => _selectedDate = picked);
+      setState(() {
+        _selectedDate = picked;
+        _dateController.text = _formatDate(picked);
+      });
     }
   }
 }
@@ -4874,6 +5061,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
               Column(
                 children: [
                   TextFormField(
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                     controller: _newOriginController,
                     decoration: InputDecoration(
                       labelText: 'Nome da origem',
@@ -4891,6 +5079,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                     controller: _newOriginIconController,
                     decoration: InputDecoration(
                       labelText: 'URL do ícone (opcional)',
@@ -5246,10 +5435,12 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
               Column(
                 children: [
                   TextFormField(
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                     controller: draft.quantityController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       labelText: 'Qtd',
+                      hintText: '1',
                       prefixIcon: const Icon(
                         Icons.format_list_numbered_outlined,
                       ),
@@ -5270,12 +5461,14 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                     controller: draft.costController,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
                     decoration: InputDecoration(
                       labelText: 'Custo unitário',
+                      hintText: '0,00',
                       prefixIcon: const Icon(Icons.attach_money_outlined),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -5301,10 +5494,12 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                 children: [
                   Expanded(
                     child: TextFormField(
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                       controller: draft.quantityController,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         labelText: 'Qtd',
+                        hintText: '1',
                         prefixIcon: const Icon(
                           Icons.format_list_numbered_outlined,
                         ),
@@ -5327,12 +5522,14 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: TextFormField(
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                       controller: draft.costController,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
                       decoration: InputDecoration(
                         labelText: 'Custo unitário',
+                        hintText: '0,00',
                         prefixIcon: const Icon(Icons.attach_money_outlined),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -5364,59 +5561,71 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
 
   Widget _buildItemDatePicker(BuildContext context, int index) {
     final draft = _itemDrafts[index];
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _pickDateForItem(index),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: draft.expirationDate == null
-                  ? Theme.of(context).colorScheme.outlineVariant
-                  : Theme.of(context).colorScheme.primary,
-              width: 2,
-            ),
-            borderRadius: BorderRadius.circular(10),
-            color: draft.expirationDate == null
-                ? Colors.transparent
-                : Theme.of(
-                    context,
-                  ).colorScheme.primaryContainer.withValues(alpha: 0.1),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.calendar_today_outlined,
-                color: draft.expirationDate == null
-                    ? Theme.of(context).colorScheme.outline
-                    : Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Validade do item',
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                    Text(
-                      draft.expirationDate == null
-                          ? 'Selecionar data'
-                          : _formatDate(draft.expirationDate!),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+    final now = DateTime.now();
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: TextFormField(
+              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+              controller: draft.expirationDateController,
+              keyboardType: TextInputType.datetime,
+              inputFormatters: _dateInputFormatters(),
+              decoration: InputDecoration(
+                labelText: 'Validade',
+                hintText: 'dd/mm/aaaa',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                isDense: true,
               ),
-            ],
+              onChanged: (value) {
+                setState(() {
+                  draft.expirationDate = _parseDateInput(
+                    value,
+                    minDate: DateTime(now.year, now.month, now.day),
+                    maxDate: DateTime(now.year + 20),
+                  );
+                });
+              },
+              validator: (value) {
+                final text = value?.trim() ?? '';
+                if (text.isEmpty) {
+                  return 'Informe a validade';
+                }
+                final parsed = _parseDateInput(
+                  text,
+                  minDate: DateTime(now.year, now.month, now.day),
+                  maxDate: DateTime(now.year + 20),
+                );
+                if (parsed == null) {
+                  return 'Use o formato dd/mm/aaaa';
+                }
+                return null;
+              },
+            ),
           ),
         ),
-      ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 48,
+          height: 48,
+          child: OutlinedButton(
+            onPressed: () => _pickDateForItem(index),
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: Icon(
+              Icons.calendar_month_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -5525,7 +5734,10 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
       initialDate: current.expirationDate ?? now,
     );
     if (picked != null) {
-      setState(() => current.expirationDate = picked);
+      setState(() {
+        current.expirationDate = picked;
+        current.expirationDateController.text = _formatDate(picked);
+      });
     }
   }
 
@@ -5604,17 +5816,26 @@ class _OrderItemDraft {
          text: initialQuantity.toString(),
        ),
        costController = TextEditingController(
-         text: initialCostPerItem.toStringAsFixed(2),
+         text: initialCostPerItem <= 0
+             ? ''
+             : initialCostPerItem.toStringAsFixed(2),
+       ),
+       expirationDateController = TextEditingController(
+         text: initialExpirationDate == null
+             ? ''
+             : _formatDate(initialExpirationDate),
        );
 
   String productSku;
   DateTime? expirationDate;
   final TextEditingController quantityController;
   final TextEditingController costController;
+  final TextEditingController expirationDateController;
 
   void dispose() {
     quantityController.dispose();
     costController.dispose();
+    expirationDateController.dispose();
   }
 }
 
@@ -5828,6 +6049,7 @@ class _ProductSelectionDialogState extends State<_ProductSelectionDialog> {
                 ),
                 const SizedBox(height: 10),
                 TextField(
+                  scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                   controller: _filterController,
                   decoration: InputDecoration(
                     hintText: 'Filtrar por SKU ou descrição',
@@ -6026,6 +6248,14 @@ Future<_CalculatorPricingConfig> _loadCalculatorPricingConfig() async {
   );
 }
 
+Future<void> _persistCalculatorMarginPercent(double marginPercent) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setDouble(
+    _calculatorMarginKey,
+    marginPercent.clamp(0, 99.9).toDouble(),
+  );
+}
+
 double _calculateSuggestedPriceFromCost(
   double cost,
   _CalculatorPricingConfig config,
@@ -6070,6 +6300,48 @@ String _formatDate(DateTime date) {
   final year = date.year.toString();
   return '$day/$month/$year';
 }
+
+DateTime? _parseDateInput(String raw, {DateTime? minDate, DateTime? maxDate}) {
+  final text = raw.trim();
+  if (text.isEmpty) {
+    return null;
+  }
+
+  final match = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(text);
+  if (match == null) {
+    return null;
+  }
+
+  final day = int.parse(match.group(1)!);
+  final month = int.parse(match.group(2)!);
+  final year = int.parse(match.group(3)!);
+  final parsed = DateTime(year, month, day);
+
+  if (parsed.year != year || parsed.month != month || parsed.day != day) {
+    return null;
+  }
+
+  final normalized = DateTime(parsed.year, parsed.month, parsed.day);
+  if (minDate != null) {
+    final min = DateTime(minDate.year, minDate.month, minDate.day);
+    if (normalized.isBefore(min)) {
+      return null;
+    }
+  }
+  if (maxDate != null) {
+    final max = DateTime(maxDate.year, maxDate.month, maxDate.day);
+    if (normalized.isAfter(max)) {
+      return null;
+    }
+  }
+
+  return normalized;
+}
+
+List<TextInputFormatter> _dateInputFormatters() => [
+  FilteringTextInputFormatter.allow(RegExp('[0-9/]')),
+  LengthLimitingTextInputFormatter(10),
+];
 
 String? _required(String? value, String fieldName) {
   if (value == null || value.trim().isEmpty) {

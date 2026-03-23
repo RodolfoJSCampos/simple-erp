@@ -238,6 +238,7 @@ class _LoginPageState extends State<LoginPage> {
                         children: [
                           // E-mail
                           TextFormField(
+              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
@@ -263,6 +264,7 @@ class _LoginPageState extends State<LoginPage> {
                           const SizedBox(height: 14),
                           // Senha
                           TextFormField(
+              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                             controller: _passwordController,
                             obscureText: _obscurePassword,
                             textInputAction: TextInputAction.done,
