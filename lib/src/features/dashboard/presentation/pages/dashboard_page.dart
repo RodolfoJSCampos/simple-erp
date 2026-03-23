@@ -4655,18 +4655,38 @@ class _UpdateStockDialogState extends State<_UpdateStockDialog> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Column(
-                          children: [
-                            Text(
-                              'Novo estoque',
-                              style: Theme.of(context).textTheme.labelMedium,
+                        child: _EnsureFieldAtTopOnFocus(
+                          child: TextFormField(
+                            scrollPadding: const EdgeInsets.fromLTRB(
+                              20,
+                              20,
+                              20,
+                              280,
                             ),
-                            Text(
-                              _parsedStock.toString(),
-                              style: Theme.of(context).textTheme.headlineSmall
-                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            controller: _stockController,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              labelText: 'Novo estoque',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              isDense: true,
                             ),
-                          ],
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                            validator: (value) {
+                              if (_required(value, 'Novo estoque') != null) {
+                                return _required(value, 'Novo estoque');
+                              }
+                              final parsed = int.tryParse(value!.trim());
+                              if (parsed == null || parsed < 0) {
+                                return 'Informe um valor inteiro valido.';
+                              }
+                              return null;
+                            },
+                            onChanged: (_) => setState(() {}),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -4676,30 +4696,6 @@ class _UpdateStockDialogState extends State<_UpdateStockDialog> {
                         icon: const Icon(Icons.add),
                       ),
                     ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _EnsureFieldAtTopOnFocus(
-                  child: TextFormField(
-                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
-                    controller: _stockController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Editar manualmente',
-                      prefixIcon: Icon(Icons.edit_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (_required(value, 'Novo estoque') != null) {
-                        return _required(value, 'Novo estoque');
-                      }
-                      final parsed = int.tryParse(value!.trim());
-                      if (parsed == null || parsed < 0) {
-                        return 'Informe um valor inteiro valido.';
-                      }
-                      return null;
-                    },
-                    onChanged: (_) => setState(() {}),
                   ),
                 ),
               ],
