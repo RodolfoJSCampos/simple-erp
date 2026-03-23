@@ -3139,6 +3139,9 @@ class _ProductOrderHistoryDialog extends StatelessWidget {
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final historyListHeight = (MediaQuery.sizeOf(context).height * 0.32)
+                .clamp(140.0, 320.0)
+                .toDouble();
             final activePricingConfig = _CalculatorPricingConfig(
               ifoodRate: pricingConfig.ifoodRate,
               paymentRate: pricingConfig.paymentRate,
@@ -3171,411 +3174,437 @@ class _ProductOrderHistoryDialog extends StatelessWidget {
               insetPadding: _dialogInsetPadding(context),
               titlePadding: EdgeInsets.zero,
               contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              content: SizedBox(
-                width: _dialogMaxWidth(context, 560),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          _ProductImagePreview(imageUrl: product.imageUrl),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  product.description,
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.titleSmall
-                                      ?.copyWith(fontWeight: FontWeight.w700),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${product.sku} · ${product.brand}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (entries.isNotEmpty) ...[
-                      Row(
-                        children: [
-                          for (final option in _CostHistoryWindow.values) ...[
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 2,
-                                ),
-                                child: _CostWindowButton(
-                                  label: option.label,
-                                  selected: selectedWindow == option,
-                                  onPressed: () {
-                                    setDialogState(() {
-                                      selectedWindow = option;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 8),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: _dialogMaxWidth(context, 560),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: Theme.of(
                             context,
                           ).colorScheme.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: Theme.of(context).colorScheme.outlineVariant,
                           ),
                         ),
-                        child: Column(
+                        child: Row(
                           children: [
-                            _CompactMetricChip(
-                              title: 'Menor',
-                              value: lowestUnitCost == null
-                                  ? '--'
-                                  : 'R\$ ${lowestUnitCost.toStringAsFixed(2)}',
-                              secondaryValue: lowestUnitCost == null
-                                  ? null
-                                  : 'R\$ ${_calculateSuggestedPriceFromCost(lowestUnitCost, activePricingConfig).toStringAsFixed(2)}',
-                              valueIcon: Icons.receipt_long_outlined,
-                              secondaryValueIcon: Icons.sell_outlined,
-                              expand: true,
-                            ),
-                            const SizedBox(height: 6),
-                            _CompactMetricChip(
-                              title: 'Medio',
-                              value: averageUnitCost == null
-                                  ? '--'
-                                  : 'R\$ ${averageUnitCost.toStringAsFixed(2)}',
-                              secondaryValue: averageUnitCost == null
-                                  ? null
-                                  : 'R\$ ${_calculateSuggestedPriceFromCost(averageUnitCost, activePricingConfig).toStringAsFixed(2)}',
-                              valueIcon: Icons.receipt_long_outlined,
-                              secondaryValueIcon: Icons.sell_outlined,
-                              highlighted: true,
-                              expand: true,
-                            ),
-                            const SizedBox(height: 6),
-                            _CompactMetricChip(
-                              title: 'Ultimo',
-                              value: lastUnitCost == null
-                                  ? '--'
-                                  : 'R\$ ${lastUnitCost.toStringAsFixed(2)}',
-                              secondaryValue: lastUnitCost == null
-                                  ? null
-                                  : 'R\$ ${_calculateSuggestedPriceFromCost(lastUnitCost, activePricingConfig).toStringAsFixed(2)}',
-                              valueIcon: Icons.receipt_long_outlined,
-                              secondaryValueIcon: Icons.sell_outlined,
-                              expand: true,
+                            _ProductImagePreview(imageUrl: product.imageUrl),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    product.description,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${product.sku} · ${product.brand}',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        scrollPadding: const EdgeInsets.fromLTRB(
-                          20,
-                          20,
-                          20,
-                          220,
+                      const SizedBox(height: 10),
+                      if (entries.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            for (final option in _CostHistoryWindow.values) ...[
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 2,
+                                  ),
+                                  child: _CostWindowButton(
+                                    label: option.label,
+                                    selected: selectedWindow == option,
+                                    onPressed: () {
+                                      setDialogState(() {
+                                        selectedWindow = option;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                        controller: marginController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        textAlign: TextAlign.center,
-                        decoration: InputDecoration(
-                          labelText: 'Margem da calculadora %',
-                          filled: true,
-                          fillColor: Theme.of(context).colorScheme.surface,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
+                            ),
                           ),
-                          isDense: true,
-                          prefixIcon: IconButton(
-                            onPressed: () {
-                              setDialogState(() {
-                                dialogMarginPercent = (dialogMarginPercent - 1)
-                                    .clamp(0, 99.9)
-                                    .toDouble();
-                                final display = formatMargin(
-                                  dialogMarginPercent,
-                                );
-                                marginController
-                                  ..text = display
-                                  ..selection = TextSelection.collapsed(
-                                    offset: display.length,
+                          child: Column(
+                            children: [
+                              _CompactMetricChip(
+                                title: 'Menor',
+                                value: lowestUnitCost == null
+                                    ? '--'
+                                    : 'R\$ ${lowestUnitCost.toStringAsFixed(2)}',
+                                secondaryValue: lowestUnitCost == null
+                                    ? null
+                                    : 'R\$ ${_calculateSuggestedPriceFromCost(lowestUnitCost, activePricingConfig).toStringAsFixed(2)}',
+                                valueIcon: Icons.receipt_long_outlined,
+                                secondaryValueIcon: Icons.sell_outlined,
+                                expand: true,
+                              ),
+                              const SizedBox(height: 6),
+                              _CompactMetricChip(
+                                title: 'Medio',
+                                value: averageUnitCost == null
+                                    ? '--'
+                                    : 'R\$ ${averageUnitCost.toStringAsFixed(2)}',
+                                secondaryValue: averageUnitCost == null
+                                    ? null
+                                    : 'R\$ ${_calculateSuggestedPriceFromCost(averageUnitCost, activePricingConfig).toStringAsFixed(2)}',
+                                valueIcon: Icons.receipt_long_outlined,
+                                secondaryValueIcon: Icons.sell_outlined,
+                                highlighted: true,
+                                expand: true,
+                              ),
+                              const SizedBox(height: 6),
+                              _CompactMetricChip(
+                                title: 'Ultimo',
+                                value: lastUnitCost == null
+                                    ? '--'
+                                    : 'R\$ ${lastUnitCost.toStringAsFixed(2)}',
+                                secondaryValue: lastUnitCost == null
+                                    ? null
+                                    : 'R\$ ${_calculateSuggestedPriceFromCost(lastUnitCost, activePricingConfig).toStringAsFixed(2)}',
+                                valueIcon: Icons.receipt_long_outlined,
+                                secondaryValueIcon: Icons.sell_outlined,
+                                expand: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _EnsureFieldAtTopOnFocus(
+                          child: TextField(
+                            scrollPadding: const EdgeInsets.fromLTRB(
+                              20,
+                              20,
+                              20,
+                              220,
+                            ),
+                            controller: marginController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              labelText: 'Margem da calculadora %',
+                              filled: true,
+                              fillColor: Theme.of(context).colorScheme.surface,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              isDense: true,
+                              prefixIcon: IconButton(
+                                onPressed: () {
+                                  setDialogState(() {
+                                    dialogMarginPercent =
+                                        (dialogMarginPercent - 1)
+                                            .clamp(0, 99.9)
+                                            .toDouble();
+                                    final display = formatMargin(
+                                      dialogMarginPercent,
+                                    );
+                                    marginController
+                                      ..text = display
+                                      ..selection = TextSelection.collapsed(
+                                        offset: display.length,
+                                      );
+                                  });
+                                  _persistCalculatorMarginPercent(
+                                    dialogMarginPercent,
                                   );
+                                },
+                                tooltip: 'Diminuir margem',
+                                icon: const Icon(Icons.remove, size: 18),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              suffixIcon: IconButton(
+                                onPressed: () {
+                                  setDialogState(() {
+                                    dialogMarginPercent =
+                                        (dialogMarginPercent + 1)
+                                            .clamp(0, 99.9)
+                                            .toDouble();
+                                    final display = formatMargin(
+                                      dialogMarginPercent,
+                                    );
+                                    marginController
+                                      ..text = display
+                                      ..selection = TextSelection.collapsed(
+                                        offset: display.length,
+                                      );
+                                  });
+                                  _persistCalculatorMarginPercent(
+                                    dialogMarginPercent,
+                                  );
+                                },
+                                tooltip: 'Aumentar margem',
+                                icon: const Icon(Icons.add, size: 18),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                            onChanged: (value) {
+                              final parsed = double.tryParse(
+                                value.replaceAll(',', '.').trim(),
+                              )?.clamp(0, 99.9).toDouble();
+                              if (parsed == null) {
+                                return;
+                              }
+                              setDialogState(() {
+                                dialogMarginPercent = parsed;
                               });
                               _persistCalculatorMarginPercent(
                                 dialogMarginPercent,
                               );
                             },
-                            tooltip: 'Diminuir margem',
-                            icon: const Icon(Icons.remove, size: 18),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          suffixIcon: IconButton(
-                            onPressed: () {
-                              setDialogState(() {
-                                dialogMarginPercent = (dialogMarginPercent + 1)
-                                    .clamp(0, 99.9)
-                                    .toDouble();
-                                final display = formatMargin(
-                                  dialogMarginPercent,
+                            onEditingComplete: () {
+                              final display = formatMargin(dialogMarginPercent);
+                              marginController
+                                ..text = display
+                                ..selection = TextSelection.collapsed(
+                                  offset: display.length,
                                 );
-                                marginController
-                                  ..text = display
-                                  ..selection = TextSelection.collapsed(
-                                    offset: display.length,
-                                  );
-                              });
-                              _persistCalculatorMarginPercent(
-                                dialogMarginPercent,
-                              );
+                              FocusScope.of(context).unfocus();
                             },
-                            tooltip: 'Aumentar margem',
-                            icon: const Icon(Icons.add, size: 18),
-                            visualDensity: VisualDensity.compact,
                           ),
                         ),
-                        onChanged: (value) {
-                          final parsed = double.tryParse(
-                            value.replaceAll(',', '.').trim(),
-                          )?.clamp(0, 99.9).toDouble();
-                          if (parsed == null) {
-                            return;
-                          }
-                          setDialogState(() {
-                            dialogMarginPercent = parsed;
-                          });
-                          _persistCalculatorMarginPercent(dialogMarginPercent);
-                        },
-                        onEditingComplete: () {
-                          final display = formatMargin(dialogMarginPercent);
-                          marginController
-                            ..text = display
-                            ..selection = TextSelection.collapsed(
-                              offset: display.length,
-                            );
-                          FocusScope.of(context).unfocus();
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    Flexible(
-                      child: entries.isEmpty
-                          ? Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainerLow,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Text(
-                                'Este produto ainda nao foi incluido em pedidos.',
-                              ),
-                            )
-                          : ListView.separated(
-                              shrinkWrap: true,
-                              itemCount: entries.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 4),
-                              itemBuilder: (context, index) {
-                                final entry = entries[index];
-                                final selectedOrder = ordersById[entry.orderId];
-                                return Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
+                      ],
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: historyListHeight,
+                        child: entries.isEmpty
+                            ? Align(
+                                alignment: Alignment.topLeft,
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerLow,
                                     borderRadius: BorderRadius.circular(10),
-                                    onTap:
-                                        !enableItemTap || selectedOrder == null
-                                        ? null
-                                        : () {
-                                            showDialog<void>(
-                                              context: context,
-                                              builder: (_) => _OrderItemsDialog(
-                                                order: selectedOrder,
-                                                products: products,
-                                                orders: orders,
-                                                enableItemTap: false,
-                                              ),
-                                            );
-                                          },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.outlineVariant,
+                                  ),
+                                  child: const Text(
+                                    'Este produto ainda nao foi incluido em pedidos.',
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                shrinkWrap: true,
+                                itemCount: entries.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 4),
+                                itemBuilder: (context, index) {
+                                  final entry = entries[index];
+                                  final selectedOrder =
+                                      ordersById[entry.orderId];
+                                  return Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(10),
+                                      onTap:
+                                          !enableItemTap ||
+                                              selectedOrder == null
+                                          ? null
+                                          : () {
+                                              showDialog<void>(
+                                                context: context,
+                                                builder: (_) =>
+                                                    _OrderItemsDialog(
+                                                      order: selectedOrder,
+                                                      products: products,
+                                                      orders: orders,
+                                                      enableItemTap: false,
+                                                    ),
+                                              );
+                                            },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 6,
                                         ),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          _OriginIcon(
-                                            iconUrl: entry.originIconUrl,
-                                            size: 30,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
                                           ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Expanded(
-                                                      child: Text(
-                                                        entry.origin,
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            _OriginIcon(
+                                              iconUrl: entry.originIconUrl,
+                                              size: 30,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          entry.origin,
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: Theme.of(context)
+                                                              .textTheme
+                                                              .labelMedium
+                                                              ?.copyWith(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Wrap(
+                                                        spacing: 6,
+                                                        runSpacing: 4,
+                                                        crossAxisAlignment:
+                                                            WrapCrossAlignment
+                                                                .center,
+                                                        children: [
+                                                          Container(
+                                                            padding:
+                                                                const EdgeInsets.symmetric(
+                                                                  horizontal: 8,
+                                                                  vertical: 3,
+                                                                ),
+                                                            decoration: BoxDecoration(
+                                                              color: Theme.of(context)
+                                                                  .colorScheme
+                                                                  .tertiaryContainer,
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    8,
+                                                                  ),
+                                                            ),
+                                                            child: Text(
+                                                              'R\$ ${entry.costPerItem.toStringAsFixed(2)}/un',
+                                                              style: Theme.of(context)
+                                                                  .textTheme
+                                                                  .labelMedium
+                                                                  ?.copyWith(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w900,
+                                                                    color: Theme.of(
+                                                                      context,
+                                                                    ).colorScheme.onTertiaryContainer,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    '${entry.orderId}  •  ${_formatDate(entry.registeredAt)}',
+                                                    style: Theme.of(
+                                                      context,
+                                                    ).textTheme.labelSmall,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons
+                                                            .inventory_2_outlined,
+                                                        size: 13,
+                                                        color: Theme.of(
+                                                          context,
+                                                        ).colorScheme.outline,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        '${entry.quantity} un',
+                                                        style: Theme.of(
+                                                          context,
+                                                        ).textTheme.labelSmall,
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Icon(
+                                                        Icons
+                                                            .summarize_outlined,
+                                                        size: 13,
+                                                        color: Theme.of(
+                                                          context,
+                                                        ).colorScheme.outline,
+                                                      ),
+                                                      const SizedBox(width: 2),
+                                                      Text(
+                                                        'Total R\$ ${entry.lineTotal.toStringAsFixed(2)}',
                                                         style: Theme.of(context)
                                                             .textTheme
-                                                            .labelMedium
+                                                            .labelSmall
                                                             ?.copyWith(
                                                               fontWeight:
                                                                   FontWeight
-                                                                      .w700,
+                                                                      .w600,
                                                             ),
                                                       ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Wrap(
-                                                      spacing: 6,
-                                                      runSpacing: 4,
-                                                      crossAxisAlignment:
-                                                          WrapCrossAlignment
-                                                              .center,
-                                                      children: [
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 3,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: Theme.of(context)
-                                                                .colorScheme
-                                                                .tertiaryContainer,
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  8,
-                                                                ),
-                                                          ),
-                                                          child: Text(
-                                                            'R\$ ${entry.costPerItem.toStringAsFixed(2)}/un',
-                                                            style: Theme.of(context)
-                                                                .textTheme
-                                                                .labelMedium
-                                                                ?.copyWith(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w900,
-                                                                  color: Theme.of(
-                                                                    context,
-                                                                  ).colorScheme.onTertiaryContainer,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  '${entry.orderId}  •  ${_formatDate(entry.registeredAt)}',
-                                                  style: Theme.of(
-                                                    context,
-                                                  ).textTheme.labelSmall,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons
-                                                          .inventory_2_outlined,
-                                                      size: 13,
-                                                      color: Theme.of(
-                                                        context,
-                                                      ).colorScheme.outline,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      '${entry.quantity} un',
-                                                      style: Theme.of(
-                                                        context,
-                                                      ).textTheme.labelSmall,
-                                                    ),
-                                                    const SizedBox(width: 10),
-                                                    Icon(
-                                                      Icons.summarize_outlined,
-                                                      size: 13,
-                                                      color: Theme.of(
-                                                        context,
-                                                      ).colorScheme.outline,
-                                                    ),
-                                                    const SizedBox(width: 2),
-                                                    Text(
-                                                      'Total R\$ ${entry.lineTotal.toStringAsFixed(2)}',
-                                                      style: Theme.of(context)
-                                                          .textTheme
-                                                          .labelSmall
-                                                          ?.copyWith(
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                          ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -4031,21 +4060,23 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
               ],
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-              controller: _descriptionController,
-              decoration: InputDecoration(
-                labelText: 'Descrição',
-                hintText: 'Ex: Leite integral 1L, Pão francês, Arroz 5kg',
-                prefixIcon: const Icon(Icons.shopping_bag_outlined),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            _EnsureFieldAtTopOnFocus(
+              child: TextFormField(
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                controller: _descriptionController,
+                decoration: InputDecoration(
+                  labelText: 'Descrição',
+                  hintText: 'Ex: Leite integral 1L, Pão francês, Arroz 5kg',
+                  prefixIcon: const Icon(Icons.shopping_bag_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  isDense: true,
                 ),
-                isDense: true,
+                textInputAction: TextInputAction.next,
+                validator: (value) => _required(value, 'Descrição'),
+                onChanged: (value) => setState(() {}),
               ),
-              textInputAction: TextInputAction.next,
-              validator: (value) => _required(value, 'Descrição'),
-              onChanged: (value) => setState(() {}),
             ),
             if (!widget.isEditing) ...[
               const SizedBox(height: 8),
@@ -4137,22 +4168,24 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
               ],
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-              controller: _imageUrlController,
-              decoration: InputDecoration(
-                labelText: 'URL da imagem',
-                hintText: 'https://example.com/image.jpg',
-                prefixIcon: const Icon(Icons.link_outlined),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            _EnsureFieldAtTopOnFocus(
+              child: TextFormField(
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                controller: _imageUrlController,
+                decoration: InputDecoration(
+                  labelText: 'URL da imagem',
+                  hintText: 'https://example.com/image.jpg',
+                  prefixIcon: const Icon(Icons.link_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  isDense: true,
                 ),
-                isDense: true,
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.next,
+                validator: (value) => _required(value, 'URL da imagem'),
+                onChanged: (value) => setState(() {}),
               ),
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.next,
-              validator: (value) => _required(value, 'URL da imagem'),
-              onChanged: (value) => setState(() {}),
             ),
             if (_imageUrlController.text.trim().isNotEmpty) ...[
               const SizedBox(height: 12),
@@ -4258,25 +4291,27 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
             ),
             const SizedBox(height: 12),
             if (_createNewBrand)
-              TextFormField(
-                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-                controller: _newBrandController,
-                decoration: InputDecoration(
-                  labelText: 'Nome da marca',
-                  hintText: 'Ex: Nestlé, Danone, Cargill',
-                  prefixIcon: const Icon(Icons.business_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              _EnsureFieldAtTopOnFocus(
+                child: TextFormField(
+                  scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                  controller: _newBrandController,
+                  decoration: InputDecoration(
+                    labelText: 'Nome da marca',
+                    hintText: 'Ex: Nestlé, Danone, Cargill',
+                    prefixIcon: const Icon(Icons.business_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    isDense: true,
                   ),
-                  isDense: true,
+                  textInputAction: TextInputAction.next,
+                  validator: (value) {
+                    if (_createNewBrand) {
+                      return _required(value, 'Nome da marca');
+                    }
+                    return null;
+                  },
                 ),
-                textInputAction: TextInputAction.next,
-                validator: (value) {
-                  if (_createNewBrand) {
-                    return _required(value, 'Nome da marca');
-                  }
-                  return null;
-                },
               )
             else ...[
               _buildBrandChips(context, isWide),
@@ -4349,12 +4384,52 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
               Row(
                 children: [
                   Expanded(
+                    child: _EnsureFieldAtTopOnFocus(
+                      child: TextFormField(
+                        scrollPadding: const EdgeInsets.fromLTRB(
+                          20,
+                          20,
+                          20,
+                          220,
+                        ),
+                        controller: _stockController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Quantidade',
+                          prefixIcon: const Icon(Icons.add_outlined),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          isDense: true,
+                        ),
+                        validator: (value) {
+                          if (_required(value, 'Estoque') != null) {
+                            return _required(value, 'Estoque');
+                          }
+                          final stock = int.tryParse(value!.trim());
+                          if (stock == null || stock < 0) {
+                            return 'Inválido';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildDatePickerField(context)),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  _EnsureFieldAtTopOnFocus(
                     child: TextFormField(
                       scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                       controller: _stockController,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         labelText: 'Quantidade',
+                        hintText: '0',
                         prefixIcon: const Icon(Icons.add_outlined),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -4373,37 +4448,6 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildDatePickerField(context)),
-                ],
-              )
-            else
-              Column(
-                children: [
-                  TextFormField(
-                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-                    controller: _stockController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Quantidade',
-                      hintText: '0',
-                      prefixIcon: const Icon(Icons.add_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      isDense: true,
-                    ),
-                    validator: (value) {
-                      if (_required(value, 'Estoque') != null) {
-                        return _required(value, 'Estoque');
-                      }
-                      final stock = int.tryParse(value!.trim());
-                      if (stock == null || stock < 0) {
-                        return 'Inválido';
-                      }
-                      return null;
-                    },
-                  ),
                   const SizedBox(height: 12),
                   _buildDatePickerField(context),
                 ],
@@ -4421,42 +4465,44 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
         Expanded(
           child: SizedBox(
             height: 48,
-            child: TextFormField(
-              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-              controller: _expirationDateController,
-              keyboardType: TextInputType.datetime,
-              inputFormatters: _dateInputFormatters(),
-              decoration: InputDecoration(
-                labelText: 'Validade',
-                hintText: 'dd/mm/aaaa',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            child: _EnsureFieldAtTopOnFocus(
+              child: TextFormField(
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                controller: _expirationDateController,
+                keyboardType: TextInputType.datetime,
+                inputFormatters: _dateInputFormatters(),
+                decoration: InputDecoration(
+                  labelText: 'Validade',
+                  hintText: 'dd/mm/aaaa',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  isDense: true,
                 ),
-                isDense: true,
-              ),
-              validator: (value) {
-                final text = value?.trim() ?? '';
-                if (text.isEmpty) {
+                validator: (value) {
+                  final text = value?.trim() ?? '';
+                  if (text.isEmpty) {
+                    return null;
+                  }
+                  final parsed = _parseDateInput(
+                    text,
+                    minDate: DateTime(now.year, now.month, now.day),
+                    maxDate: DateTime(now.year + 20),
+                  );
+                  if (parsed == null) {
+                    return 'Use o formato dd/mm/aaaa';
+                  }
                   return null;
-                }
-                final parsed = _parseDateInput(
-                  text,
-                  minDate: DateTime(now.year, now.month, now.day),
-                  maxDate: DateTime(now.year + 20),
-                );
-                if (parsed == null) {
-                  return 'Use o formato dd/mm/aaaa';
-                }
-                return null;
-              },
-              onChanged: (value) {
-                final parsed = _parseDateInput(
-                  value,
-                  minDate: DateTime(now.year, now.month, now.day),
-                  maxDate: DateTime(now.year + 20),
-                );
-                _expirationDate = parsed;
-              },
+                },
+                onChanged: (value) {
+                  final parsed = _parseDateInput(
+                    value,
+                    minDate: DateTime(now.year, now.month, now.day),
+                    maxDate: DateTime(now.year + 20),
+                  );
+                  _expirationDate = parsed;
+                },
+              ),
             ),
           ),
         ),
@@ -4574,84 +4620,88 @@ class _UpdateStockDialogState extends State<_UpdateStockDialog> {
     return AlertDialog(
       insetPadding: _dialogInsetPadding(context),
       title: const Text('Atualizar estoque'),
-      content: Form(
-        key: _formKey,
-        child: SizedBox(
-          width: _dialogMaxWidth(context, 460),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.product.description,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: scheme.outlineVariant),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: SizedBox(
+            width: _dialogMaxWidth(context, 460),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.product.description,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
-                child: Row(
-                  children: [
-                    IconButton.filledTonal(
-                      onPressed: () => _adjustStock(-1),
-                      tooltip: 'Diminuir',
-                      icon: const Icon(Icons.remove),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            'Novo estoque',
-                            style: Theme.of(context).textTheme.labelMedium,
-                          ),
-                          Text(
-                            _parsedStock.toString(),
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                        ],
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton.filledTonal(
+                        onPressed: () => _adjustStock(-1),
+                        tooltip: 'Diminuir',
+                        icon: const Icon(Icons.remove),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton.filled(
-                      onPressed: () => _adjustStock(1),
-                      tooltip: 'Aumentar',
-                      icon: const Icon(Icons.add),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              'Novo estoque',
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
+                            Text(
+                              _parsedStock.toString(),
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton.filled(
+                        onPressed: () => _adjustStock(1),
+                        tooltip: 'Aumentar',
+                        icon: const Icon(Icons.add),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-                controller: _stockController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Editar manualmente',
-                  prefixIcon: Icon(Icons.edit_outlined),
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 12),
+                _EnsureFieldAtTopOnFocus(
+                  child: TextFormField(
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                    controller: _stockController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Editar manualmente',
+                      prefixIcon: Icon(Icons.edit_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (_required(value, 'Novo estoque') != null) {
+                        return _required(value, 'Novo estoque');
+                      }
+                      final parsed = int.tryParse(value!.trim());
+                      if (parsed == null || parsed < 0) {
+                        return 'Informe um valor inteiro valido.';
+                      }
+                      return null;
+                    },
+                    onChanged: (_) => setState(() {}),
+                  ),
                 ),
-                validator: (value) {
-                  if (_required(value, 'Novo estoque') != null) {
-                    return _required(value, 'Novo estoque');
-                  }
-                  final parsed = int.tryParse(value!.trim());
-                  if (parsed == null || parsed < 0) {
-                    return 'Informe um valor inteiro valido.';
-                  }
-                  return null;
-                },
-                onChanged: (_) => setState(() {}),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -4757,33 +4807,35 @@ class _UpdateExpirationDialogState extends State<_UpdateExpirationDialog> {
                         Expanded(
                           child: SizedBox(
                             height: 48,
-                            child: TextField(
-                              scrollPadding: const EdgeInsets.fromLTRB(
-                                20,
-                                20,
-                                20,
-                                220,
-                              ),
-                              controller: _dateController,
-                              keyboardType: TextInputType.datetime,
-                              inputFormatters: _dateInputFormatters(),
-                              decoration: InputDecoration(
-                                hintText: 'dd/mm/aaaa',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                            child: _EnsureFieldAtTopOnFocus(
+                              child: TextField(
+                                scrollPadding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  20,
+                                  20,
+                                  220,
                                 ),
-                                isDense: true,
+                                controller: _dateController,
+                                keyboardType: TextInputType.datetime,
+                                inputFormatters: _dateInputFormatters(),
+                                decoration: InputDecoration(
+                                  hintText: 'dd/mm/aaaa',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  isDense: true,
+                                ),
+                                onChanged: (value) {
+                                  final now = DateTime.now();
+                                  setState(() {
+                                    _selectedDate = _parseDateInput(
+                                      value,
+                                      minDate: DateTime(now.year - 10),
+                                      maxDate: DateTime(now.year + 20),
+                                    );
+                                  });
+                                },
                               ),
-                              onChanged: (value) {
-                                final now = DateTime.now();
-                                setState(() {
-                                  _selectedDate = _parseDateInput(
-                                    value,
-                                    minDate: DateTime(now.year - 10),
-                                    maxDate: DateTime(now.year + 20),
-                                  );
-                                });
-                              },
                             ),
                           ),
                         ),
@@ -5060,38 +5112,42 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
             if (_createNewOrigin)
               Column(
                 children: [
-                  TextFormField(
-                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-                    controller: _newOriginController,
-                    decoration: InputDecoration(
-                      labelText: 'Nome da origem',
-                      hintText: 'Ex: Fornecedor ABC, Mercado XYZ',
-                      prefixIcon: const Icon(Icons.business_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  _EnsureFieldAtTopOnFocus(
+                    child: TextFormField(
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      controller: _newOriginController,
+                      decoration: InputDecoration(
+                        labelText: 'Nome da origem',
+                        hintText: 'Ex: Fornecedor ABC, Mercado XYZ',
+                        prefixIcon: const Icon(Icons.business_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        isDense: true,
                       ),
-                      isDense: true,
+                      validator: (value) {
+                        if (_createNewOrigin) return _required(value, 'Origem');
+                        return null;
+                      },
                     ),
-                    validator: (value) {
-                      if (_createNewOrigin) return _required(value, 'Origem');
-                      return null;
-                    },
                   ),
                   const SizedBox(height: 8),
-                  TextFormField(
-                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-                    controller: _newOriginIconController,
-                    decoration: InputDecoration(
-                      labelText: 'URL do ícone (opcional)',
-                      hintText: 'https://example.com/logo.png',
-                      prefixIcon: const Icon(Icons.image_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  _EnsureFieldAtTopOnFocus(
+                    child: TextFormField(
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      controller: _newOriginIconController,
+                      decoration: InputDecoration(
+                        labelText: 'URL do ícone (opcional)',
+                        hintText: 'https://example.com/logo.png',
+                        prefixIcon: const Icon(Icons.image_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        isDense: true,
                       ),
-                      isDense: true,
+                      keyboardType: TextInputType.url,
+                      onChanged: (_) => setState(() {}),
                     ),
-                    keyboardType: TextInputType.url,
-                    onChanged: (_) => setState(() {}),
                   ),
                   if (_newOriginIconController.text.trim().isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -5434,65 +5490,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
             if (isSmallScreen)
               Column(
                 children: [
-                  TextFormField(
-                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-                    controller: draft.quantityController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Qtd',
-                      hintText: '1',
-                      prefixIcon: const Icon(
-                        Icons.format_list_numbered_outlined,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      isDense: true,
-                    ),
-                    validator: (value) {
-                      if (_required(value, 'Quantidade') != null) {
-                        return _required(value, 'Quantidade');
-                      }
-                      final qty = int.tryParse(value!.trim());
-                      if (qty == null || qty <= 0) return 'Inválido';
-                      return null;
-                    },
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-                    controller: draft.costController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Custo unitário',
-                      hintText: '0,00',
-                      prefixIcon: const Icon(Icons.attach_money_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      isDense: true,
-                    ),
-                    validator: (value) {
-                      if (_required(value, 'Custo') != null) {
-                        return _required(value, 'Custo');
-                      }
-                      final c = double.tryParse(
-                        value!.trim().replaceAll(',', '.'),
-                      );
-                      if (c == null || c < 0) return 'Inválido';
-                      return null;
-                    },
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ],
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
+                  _EnsureFieldAtTopOnFocus(
                     child: TextFormField(
                       scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                       controller: draft.quantityController,
@@ -5519,8 +5517,8 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
+                  const SizedBox(height: 10),
+                  _EnsureFieldAtTopOnFocus(
                     child: TextFormField(
                       scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                       controller: draft.costController,
@@ -5550,6 +5548,82 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                     ),
                   ),
                 ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: _EnsureFieldAtTopOnFocus(
+                      child: TextFormField(
+                        scrollPadding: const EdgeInsets.fromLTRB(
+                          20,
+                          20,
+                          20,
+                          220,
+                        ),
+                        controller: draft.quantityController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Qtd',
+                          hintText: '1',
+                          prefixIcon: const Icon(
+                            Icons.format_list_numbered_outlined,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          isDense: true,
+                        ),
+                        validator: (value) {
+                          if (_required(value, 'Quantidade') != null) {
+                            return _required(value, 'Quantidade');
+                          }
+                          final qty = int.tryParse(value!.trim());
+                          if (qty == null || qty <= 0) return 'Inválido';
+                          return null;
+                        },
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _EnsureFieldAtTopOnFocus(
+                      child: TextFormField(
+                        scrollPadding: const EdgeInsets.fromLTRB(
+                          20,
+                          20,
+                          20,
+                          220,
+                        ),
+                        controller: draft.costController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Custo unitário',
+                          hintText: '0,00',
+                          prefixIcon: const Icon(Icons.attach_money_outlined),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          isDense: true,
+                        ),
+                        validator: (value) {
+                          if (_required(value, 'Custo') != null) {
+                            return _required(value, 'Custo');
+                          }
+                          final c = double.tryParse(
+                            value!.trim().replaceAll(',', '.'),
+                          );
+                          if (c == null || c < 0) return 'Inválido';
+                          return null;
+                        },
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             const SizedBox(height: 10),
             _buildItemDatePicker(context, index),
@@ -5567,43 +5641,45 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
         Expanded(
           child: SizedBox(
             height: 48,
-            child: TextFormField(
-              scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-              controller: draft.expirationDateController,
-              keyboardType: TextInputType.datetime,
-              inputFormatters: _dateInputFormatters(),
-              decoration: InputDecoration(
-                labelText: 'Validade',
-                hintText: 'dd/mm/aaaa',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+            child: _EnsureFieldAtTopOnFocus(
+              child: TextFormField(
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                controller: draft.expirationDateController,
+                keyboardType: TextInputType.datetime,
+                inputFormatters: _dateInputFormatters(),
+                decoration: InputDecoration(
+                  labelText: 'Validade',
+                  hintText: 'dd/mm/aaaa',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  isDense: true,
                 ),
-                isDense: true,
-              ),
-              onChanged: (value) {
-                setState(() {
-                  draft.expirationDate = _parseDateInput(
-                    value,
+                onChanged: (value) {
+                  setState(() {
+                    draft.expirationDate = _parseDateInput(
+                      value,
+                      minDate: DateTime(now.year, now.month, now.day),
+                      maxDate: DateTime(now.year + 20),
+                    );
+                  });
+                },
+                validator: (value) {
+                  final text = value?.trim() ?? '';
+                  if (text.isEmpty) {
+                    return 'Informe a validade';
+                  }
+                  final parsed = _parseDateInput(
+                    text,
                     minDate: DateTime(now.year, now.month, now.day),
                     maxDate: DateTime(now.year + 20),
                   );
-                });
-              },
-              validator: (value) {
-                final text = value?.trim() ?? '';
-                if (text.isEmpty) {
-                  return 'Informe a validade';
-                }
-                final parsed = _parseDateInput(
-                  text,
-                  minDate: DateTime(now.year, now.month, now.day),
-                  maxDate: DateTime(now.year + 20),
-                );
-                if (parsed == null) {
-                  return 'Use o formato dd/mm/aaaa';
-                }
-                return null;
-              },
+                  if (parsed == null) {
+                    return 'Use o formato dd/mm/aaaa';
+                  }
+                  return null;
+                },
+              ),
             ),
           ),
         ),
@@ -5836,6 +5912,48 @@ class _OrderItemDraft {
     quantityController.dispose();
     costController.dispose();
     expirationDateController.dispose();
+  }
+}
+
+class _EnsureFieldAtTopOnFocus extends StatefulWidget {
+  const _EnsureFieldAtTopOnFocus({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_EnsureFieldAtTopOnFocus> createState() =>
+      _EnsureFieldAtTopOnFocusState();
+}
+
+class _EnsureFieldAtTopOnFocusState extends State<_EnsureFieldAtTopOnFocus> {
+  final GlobalKey _childKey = GlobalKey();
+
+  void _scrollFocusedFieldToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final childContext = _childKey.currentContext;
+      if (childContext == null) return;
+
+      Scrollable.ensureVisible(
+        childContext,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        alignment: 0.02,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (hasFocus) {
+        if (hasFocus) {
+          _scrollFocusedFieldToTop();
+        }
+      },
+      child: KeyedSubtree(key: _childKey, child: widget.child),
+    );
   }
 }
 
