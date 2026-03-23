@@ -3603,6 +3603,7 @@ class _ProductOrderHistoryDialog extends StatelessWidget {
                                 },
                               ),
                       ),
+                      const _DialogKeyboardSafeBottomSpacer(),
                     ],
                   ),
                 ),
@@ -4013,6 +4014,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
                     _buildBrandSection(context, isWide),
                     const SizedBox(height: 16),
                     _buildStockAndDateSection(context, isWide),
+                    const _DialogKeyboardSafeBottomSpacer(),
                   ],
                 ),
               ),
@@ -5037,6 +5039,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                     _buildItemsSection(context, isWide),
                     const SizedBox(height: 16),
                     _buildOrderSummary(context),
+                    const _DialogKeyboardSafeBottomSpacer(),
                   ],
                 ),
               ),
@@ -5928,24 +5931,25 @@ class _EnsureFieldAtTopOnFocus extends StatefulWidget {
 class _EnsureFieldAtTopOnFocusState extends State<_EnsureFieldAtTopOnFocus> {
   final GlobalKey _childKey = GlobalKey();
 
-  void _scrollFocusedFieldToTop() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final childContext = _childKey.currentContext;
-      if (childContext == null) return;
+  void _ensureVisibleNow() {
+    if (!mounted) return;
+    final current = _childKey.currentContext;
+    if (current == null) return;
+    Scrollable.ensureVisible(
+      current,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: 0.06,
+      alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+    );
+  }
 
-      // Schedule a second frame callback to allow keyboard to appear
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Scrollable.ensureVisible(
-          childContext,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          alignment: 0.0,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-        );
-      });
-    });
+  void _scrollFocusedFieldToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureVisibleNow());
+
+    // Repeat while keyboard animates/opening so fields at the end can still
+    // be moved to the top after viewInsets and layout settle.
+    Future<void>.delayed(const Duration(milliseconds: 180), _ensureVisibleNow);
   }
 
   @override
@@ -5958,6 +5962,27 @@ class _EnsureFieldAtTopOnFocusState extends State<_EnsureFieldAtTopOnFocus> {
       },
       child: KeyedSubtree(key: _childKey, child: widget.child),
     );
+  }
+}
+
+class _DialogKeyboardSafeBottomSpacer extends StatelessWidget {
+  const _DialogKeyboardSafeBottomSpacer();
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
+    if (keyboardHeight <= 0) {
+      return const SizedBox(height: 8);
+    }
+
+    // Aggressive extra space to guarantee there is enough trailing scroll
+    // extent even when the focused field is the very last one in the modal.
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final spacerHeight = (keyboardHeight + (screenHeight * 0.2)).clamp(
+      140.0,
+      320.0,
+    );
+    return SizedBox(height: spacerHeight);
   }
 }
 
@@ -6938,4 +6963,3 @@ class _MetricValueWithIcon extends StatelessWidget {
     );
   }
 }
-
