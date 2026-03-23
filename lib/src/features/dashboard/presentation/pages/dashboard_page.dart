@@ -2348,7 +2348,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
         insetPadding: _dialogInsetPadding(context),
         title: Text(title),
         content: TextField(
-          scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+          scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
           controller: controller,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -2417,7 +2417,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
         insetPadding: _dialogInsetPadding(context),
         title: const Text('Alterar operacao fixa'),
         content: TextField(
-          scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+          scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
           controller: controller,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -2707,7 +2707,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
                 builder: (context, constraints) {
                   final fields = [
                     TextField(
-                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                       controller: _costController,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
@@ -2726,7 +2726,7 @@ class _PriceCalculatorTabState extends State<_PriceCalculatorTab> {
                       ),
                     ),
                     TextField(
-                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                       controller: _marginController,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
@@ -4062,7 +4062,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
             const SizedBox(height: 12),
             _EnsureFieldAtTopOnFocus(
               child: TextFormField(
-                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                 controller: _descriptionController,
                 decoration: InputDecoration(
                   labelText: 'Descrição',
@@ -4170,7 +4170,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
             const SizedBox(height: 12),
             _EnsureFieldAtTopOnFocus(
               child: TextFormField(
-                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                 controller: _imageUrlController,
                 decoration: InputDecoration(
                   labelText: 'URL da imagem',
@@ -4293,7 +4293,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
             if (_createNewBrand)
               _EnsureFieldAtTopOnFocus(
                 child: TextFormField(
-                  scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                  scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                   controller: _newBrandController,
                   decoration: InputDecoration(
                     labelText: 'Nome da marca',
@@ -4390,7 +4390,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
                           20,
                           20,
                           20,
-                          220,
+                          280,
                         ),
                         controller: _stockController,
                         keyboardType: TextInputType.number,
@@ -4424,7 +4424,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
                 children: [
                   _EnsureFieldAtTopOnFocus(
                     child: TextFormField(
-                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                       controller: _stockController,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
@@ -4467,7 +4467,7 @@ class _CreateProductDialogState extends State<_CreateProductDialog> {
             height: 48,
             child: _EnsureFieldAtTopOnFocus(
               child: TextFormField(
-                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                 controller: _expirationDateController,
                 keyboardType: TextInputType.datetime,
                 inputFormatters: _dateInputFormatters(),
@@ -4679,7 +4679,7 @@ class _UpdateStockDialogState extends State<_UpdateStockDialog> {
                 const SizedBox(height: 12),
                 _EnsureFieldAtTopOnFocus(
                   child: TextFormField(
-                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                     controller: _stockController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
@@ -5114,7 +5114,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                 children: [
                   _EnsureFieldAtTopOnFocus(
                     child: TextFormField(
-                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                       controller: _newOriginController,
                       decoration: InputDecoration(
                         labelText: 'Nome da origem',
@@ -5134,7 +5134,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                   const SizedBox(height: 8),
                   _EnsureFieldAtTopOnFocus(
                     child: TextFormField(
-                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                       controller: _newOriginIconController,
                       decoration: InputDecoration(
                         labelText: 'URL do ícone (opcional)',
@@ -5492,7 +5492,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                 children: [
                   _EnsureFieldAtTopOnFocus(
                     child: TextFormField(
-                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                       controller: draft.quantityController,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
@@ -5520,7 +5520,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                   const SizedBox(height: 10),
                   _EnsureFieldAtTopOnFocus(
                     child: TextFormField(
-                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                       controller: draft.costController,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
@@ -5643,7 +5643,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
             height: 48,
             child: _EnsureFieldAtTopOnFocus(
               child: TextFormField(
-                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                 controller: draft.expirationDateController,
                 keyboardType: TextInputType.datetime,
                 inputFormatters: _dateInputFormatters(),
@@ -5934,13 +5934,17 @@ class _EnsureFieldAtTopOnFocusState extends State<_EnsureFieldAtTopOnFocus> {
       final childContext = _childKey.currentContext;
       if (childContext == null) return;
 
-      Scrollable.ensureVisible(
-        childContext,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        alignment: 0.02,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-      );
+      // Schedule a second frame callback to allow keyboard to appear
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Scrollable.ensureVisible(
+          childContext,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          alignment: 0.0,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+        );
+      });
     });
   }
 
@@ -6167,7 +6171,7 @@ class _ProductSelectionDialogState extends State<_ProductSelectionDialog> {
                 ),
                 const SizedBox(height: 10),
                 TextField(
-                  scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                  scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 280),
                   controller: _filterController,
                   decoration: InputDecoration(
                     hintText: 'Filtrar por SKU ou descrição',
@@ -6934,3 +6938,4 @@ class _MetricValueWithIcon extends StatelessWidget {
     );
   }
 }
+
