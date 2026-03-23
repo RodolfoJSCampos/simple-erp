@@ -56,11 +56,19 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _showOutOfStockProducts = false;
   String _orderSearchQuery = '';
   String _selectedOriginFilter = _allOriginsLabel;
+  late final PageController _pageController;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _selectedIndex);
     _reloadData();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _reloadData() async {
@@ -1499,8 +1507,14 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
               ),
             Expanded(
-              child: IndexedStack(
-                index: _selectedIndex,
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (value) {
+                  if (!mounted || _selectedIndex == value) {
+                    return;
+                  }
+                  setState(() => _selectedIndex = value);
+                },
                 children: [
                   _ProductsListTab(
                     products: _filteredProducts,
@@ -1549,7 +1563,15 @@ class _DashboardPageState extends State<DashboardPage> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (value) {
+          if (_selectedIndex == value) {
+            return;
+          }
           setState(() => _selectedIndex = value);
+          _pageController.animateToPage(
+            value,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          );
         },
         destinations: const [
           NavigationDestination(
