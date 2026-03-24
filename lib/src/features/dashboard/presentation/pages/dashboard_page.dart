@@ -18,11 +18,15 @@ class DashboardPage extends StatefulWidget {
     required this.productController,
     required this.orderController,
     required this.usingFirebase,
+    required this.themeMode,
+    required this.onThemeModeChanged,
   });
 
   final ProductController productController;
   final OrderController orderController;
   final bool usingFirebase;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -45,7 +49,6 @@ class _DashboardPageState extends State<DashboardPage> {
   String? _nextOrderCursor;
   bool _hasMoreProducts = true;
   bool _hasMoreOrders = true;
-  bool _editModeEnabled = false;
   bool _showAdvancedProductFilters = false;
   bool _showAdvancedOrderFilters = false;
   String _searchQuery = '';
@@ -841,6 +844,68 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
+  Widget _buildDashboardTab(int index) {
+    switch (index) {
+      case 0:
+        return _ProductsListTab(
+          products: _filteredProducts,
+          orders: _orders,
+          isLoading: _loadingProducts,
+          isLoadingMore: _loadingMoreProducts,
+          canLoadMore: _hasMoreProducts,
+          onLoadMore: _loadMoreProducts,
+          onUpdateStock: _showManualStockUpdateDialog,
+          onUpdateExpirationDate: _showManualExpirationUpdateDialog,
+          onEditProduct: _showEditProductDialog,
+          onDeleteProduct: _deleteProduct,
+          emptyMessage: _products.isEmpty
+              ? 'Use o botao de adicionar para incluir o primeiro produto.'
+              : 'Nenhum produto encontrado para os filtros aplicados.',
+        );
+      case 1:
+        return const _PriceCalculatorTab();
+      case 2:
+      default:
+        return _OrdersListTab(
+          orders: _filteredOrders,
+          products: _products,
+          isLoading: _loadingOrders,
+          isLoadingMore: _loadingMoreOrders,
+          canLoadMore: _hasMoreOrders,
+          onLoadMore: _loadMoreOrders,
+          onEditOrder: _showEditOrderDialog,
+          onDeleteOrder: _deleteOrder,
+          emptyMessage: _orders.isEmpty
+              ? 'Use o botao de adicionar para registrar o primeiro pedido.'
+              : 'Nenhum pedido encontrado para os filtros aplicados.',
+        );
+    }
+  }
+
+  Future<void> _requestLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Sair'),
+        content: const Text('Deseja encerrar a sessao?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await FirebaseAuth.instance.signOut();
+    }
+  }
+
   List<Order> get _filteredOrders {
     final normalizedQuery = _orderSearchQuery.trim().toLowerCase();
 
@@ -894,27 +959,10 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     final isProductsTab = _selectedIndex == 0;
     final isOrdersTab = _selectedIndex == 2;
-    final canToggleEditMode = isProductsTab || isOrdersTab;
-    final editWarningColor = Colors.amber.shade700;
-    final isEditHighlightVisible = _editModeEnabled && canToggleEditMode;
-    final scheme = Theme.of(context).colorScheme;
-    final appBackgroundColor = isEditHighlightVisible
-        ? Color.alphaBlend(
-            editWarningColor.withValues(alpha: 0.08),
-            scheme.surface,
-          )
-        : null;
-    final appBarBackgroundColor = isEditHighlightVisible
-        ? Color.alphaBlend(
-            editWarningColor.withValues(alpha: 0.14),
-            scheme.surface,
-          )
-        : null;
 
     return Scaffold(
-      backgroundColor: appBackgroundColor,
       appBar: AppBar(
-        backgroundColor: appBarBackgroundColor ?? Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         surfaceTintColor: Colors.transparent,
         title: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -933,495 +981,180 @@ class _DashboardPageState extends State<DashboardPage> {
           ],
         ),
         actions: [
-          if (canToggleEditMode)
-            IconButton(
-              onPressed: () {
-                setState(() => _editModeEnabled = !_editModeEnabled);
-              },
-              icon: Icon(
-                _editModeEnabled
-                    ? Icons.edit_off_outlined
-                    : Icons.edit_outlined,
-                color: _editModeEnabled ? editWarningColor : null,
-              ),
-              tooltip: _editModeEnabled
-                  ? 'Desativar modo edicao/exclusao'
-                  : 'Ativar modo edicao/exclusao',
-            ),
-          IconButton(
-            onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: const Text('Sair'),
-                  content: const Text('Deseja encerrar a sessao?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('Cancelar'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text('Sair'),
-                    ),
-                  ],
-                ),
-              );
-              if (confirmed == true) {
-                await FirebaseAuth.instance.signOut();
+          PopupMenuButton<_DashboardSettingsAction>(
+            tooltip: 'Configurações',
+            icon: const Icon(Icons.settings_outlined),
+            onSelected: (action) async {
+              switch (action) {
+                case _DashboardSettingsAction.themeToggle:
+                  widget.onThemeModeChanged(
+                    widget.themeMode == ThemeMode.dark
+                        ? ThemeMode.light
+                        : ThemeMode.dark,
+                  );
+                  break;
+                case _DashboardSettingsAction.logout:
+                  await _requestLogout();
+                  break;
               }
             },
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sair',
+            itemBuilder: (context) {
+              final isDark = widget.themeMode == ThemeMode.dark;
+              return [
+                CheckedPopupMenuItem<_DashboardSettingsAction>(
+                  value: _DashboardSettingsAction.themeToggle,
+                  checked: isDark,
+                  child: Row(
+                    children: [
+                      Icon(
+                        isDark
+                            ? Icons.dark_mode_outlined
+                            : Icons.light_mode_outlined,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('Tema'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem<_DashboardSettingsAction>(
+                  value: _DashboardSettingsAction.logout,
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, size: 18),
+                      SizedBox(width: 12),
+                      Text('Sair'),
+                    ],
+                  ),
+                ),
+              ];
+            },
           ),
         ],
       ),
-      body: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        decoration: BoxDecoration(
-          color: isEditHighlightVisible
-              ? editWarningColor.withValues(alpha: 0.04)
-              : Colors.transparent,
-        ),
-        child: Column(
-          children: [
-            if (isEditHighlightVisible)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade100,
-                  border: Border.all(color: editWarningColor),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.warning_amber_rounded),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Modo edicao/exclusao ativo: acoes de editar e excluir estao habilitadas.',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            if (isProductsTab)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 860;
+      body: Column(
+        children: [
+          if (isProductsTab)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth >= 860;
 
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant,
-                        ),
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: SizedBox(
-                                  height: 44,
-                                  child: TextField(
-                                    scrollPadding: const EdgeInsets.fromLTRB(
-                                      20,
-                                      20,
-                                      20,
-                                      220,
-                                    ),
-                                    onChanged: (value) {
-                                      setState(() => _searchQuery = value);
-                                    },
-                                    decoration: InputDecoration(
-                                      prefixIcon: const Icon(Icons.search),
-                                      hintText: 'Buscar por descricao ou SKU',
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 8,
-                                          ),
-                                      suffixIcon: _searchQuery.isEmpty
-                                          ? null
-                                          : IconButton(
-                                              tooltip: 'Limpar busca',
-                                              onPressed: () {
-                                                setState(
-                                                  () => _searchQuery = '',
-                                                );
-                                              },
-                                              icon: const Icon(Icons.close),
-                                            ),
-                                      filled: true,
-                                      fillColor: Theme.of(
-                                        context,
-                                      ).colorScheme.surface,
-                                      isDense: true,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: BorderSide(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.outlineVariant,
-                                        ),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: BorderSide(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                          width: 1.4,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Tooltip(
-                                message: _showAdvancedProductFilters
-                                    ? 'Ocultar filtros'
-                                    : 'Mostrar filtros',
-                                child: SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: Align(
-                                    alignment: Alignment.topCenter,
-                                    child: SizedBox(
-                                      width: 40,
-                                      height: 40,
-                                      child: Material(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.surface,
-                                        shape: CircleBorder(
-                                          side: BorderSide(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.outlineVariant,
-                                          ),
-                                        ),
-                                        clipBehavior: Clip.antiAlias,
-                                        child: InkWell(
-                                          customBorder: const CircleBorder(),
-                                          onTap: () {
-                                            setState(() {
-                                              _showAdvancedProductFilters =
-                                                  !_showAdvancedProductFilters;
-                                            });
-                                          },
-                                          child: Center(
-                                            child: Icon(
-                                              _showAdvancedProductFilters
-                                                  ? Icons.expand_less
-                                                  : Icons.tune,
-                                              size: 18,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (_showAdvancedProductFilters) ...[
-                            const SizedBox(height: 10),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.outlineVariant,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.inventory_2_outlined,
-                                    size: 16,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      'Exibir zerados',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.labelLarge,
-                                    ),
-                                  ),
-                                  Transform.scale(
-                                    scale: 0.85,
-                                    child: Switch.adaptive(
-                                      value: _showOutOfStockProducts,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _showOutOfStockProducts = value;
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            if (_hasActiveAdvancedProductFilters)
-                              const SizedBox(height: 10),
-                            if (isWide)
-                              Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(child: _buildBrandFilterField()),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: _buildExpirationFilterField(),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      Expanded(child: _buildSortOrderField()),
-                                      const SizedBox(width: 8),
-                                      Tooltip(
-                                        message: _sortAscending
-                                            ? 'Ordem crescente'
-                                            : 'Ordem decrescente',
-                                        child: IconButton.outlined(
-                                          onPressed: () => setState(
-                                            () => _sortAscending =
-                                                !_sortAscending,
-                                          ),
-                                          icon: Icon(
-                                            _sortAscending
-                                                ? Icons.arrow_upward
-                                                : Icons.arrow_downward,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              )
-                            else
-                              Column(
-                                children: [
-                                  _buildBrandFilterField(),
-                                  const SizedBox(height: 10),
-                                  _buildExpirationFilterField(),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      Expanded(child: _buildSortOrderField()),
-                                      const SizedBox(width: 8),
-                                      Tooltip(
-                                        message: _sortAscending
-                                            ? 'Ordem crescente'
-                                            : 'Ordem decrescente',
-                                        child: IconButton.outlined(
-                                          onPressed: () => setState(
-                                            () => _sortAscending =
-                                                !_sortAscending,
-                                          ),
-                                          icon: Icon(
-                                            _sortAscending
-                                                ? Icons.arrow_upward
-                                                : Icons.arrow_downward,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            if (_hasActiveAdvancedProductFilters) ...[
-                              const SizedBox(height: 10),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _QuickStatChip(
-                                        icon: Icons.filter_alt_outlined,
-                                        label:
-                                            '$_activeAdvancedProductFilterCount filtro(s) ativo(s)',
-                                        minHeight: 40,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      SizedBox(
-                                        height: 40,
-                                        child: OutlinedButton.icon(
-                                          onPressed:
-                                              _clearAdvancedProductFilters,
-                                          icon: const Icon(
-                                            Icons.clear,
-                                            size: 16,
-                                          ),
-                                          label: const Text('Limpar filtros'),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            if (isOrdersTab)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.outlineVariant,
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              height: 44,
-                              child: TextField(
-                                scrollPadding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  20,
-                                  20,
-                                  220,
-                                ),
-                                onChanged: (value) {
-                                  setState(() => _orderSearchQuery = value);
-                                },
-                                decoration: InputDecoration(
-                                  prefixIcon: const Icon(Icons.search),
-                                  hintText:
-                                      'Buscar pedidos por produto (descricao ou SKU)',
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 8,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: SizedBox(
+                                height: 44,
+                                child: TextField(
+                                  scrollPadding: const EdgeInsets.fromLTRB(
+                                    20,
+                                    20,
+                                    20,
+                                    220,
                                   ),
-                                  suffixIcon: _orderSearchQuery.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: 'Limpar busca',
-                                          onPressed: () {
-                                            setState(
-                                              () => _orderSearchQuery = '',
-                                            );
-                                          },
-                                          icon: const Icon(Icons.close),
-                                        ),
-                                  filled: true,
-                                  fillColor: Theme.of(
-                                    context,
-                                  ).colorScheme.surface,
-                                  isDense: true,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                    borderSide: BorderSide(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.outlineVariant,
+                                  onChanged: (value) {
+                                    setState(() => _searchQuery = value);
+                                  },
+                                  decoration: InputDecoration(
+                                    prefixIcon: const Icon(Icons.search),
+                                    hintText: 'Buscar por descricao ou SKU',
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
                                     ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                    borderSide: BorderSide(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                      width: 1.4,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Tooltip(
-                            message: _showAdvancedOrderFilters
-                                ? 'Ocultar filtros'
-                                : 'Mostrar filtros',
-                            child: SizedBox(
-                              width: 44,
-                              height: 44,
-                              child: Align(
-                                alignment: Alignment.topCenter,
-                                child: SizedBox(
-                                  width: 40,
-                                  height: 40,
-                                  child: Material(
-                                    color: Theme.of(
+                                    suffixIcon: _searchQuery.isEmpty
+                                        ? null
+                                        : IconButton(
+                                            tooltip: 'Limpar busca',
+                                            onPressed: () {
+                                              setState(() => _searchQuery = '');
+                                            },
+                                            icon: const Icon(Icons.close),
+                                          ),
+                                    filled: true,
+                                    fillColor: Theme.of(
                                       context,
                                     ).colorScheme.surface,
-                                    shape: CircleBorder(
-                                      side: BorderSide(
+                                    isDense: true,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide(
                                         color: Theme.of(
                                           context,
                                         ).colorScheme.outlineVariant,
                                       ),
                                     ),
-                                    clipBehavior: Clip.antiAlias,
-                                    child: InkWell(
-                                      customBorder: const CircleBorder(),
-                                      onTap: () {
-                                        setState(() {
-                                          _showAdvancedOrderFilters =
-                                              !_showAdvancedOrderFilters;
-                                        });
-                                      },
-                                      child: Center(
-                                        child: Icon(
-                                          _showAdvancedOrderFilters
-                                              ? Icons.expand_less
-                                              : Icons.tune,
-                                          size: 18,
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        width: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message: _showAdvancedProductFilters
+                                  ? 'Ocultar filtros'
+                                  : 'Mostrar filtros',
+                              child: SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: Align(
+                                  alignment: Alignment.topCenter,
+                                  child: SizedBox(
+                                    width: 40,
+                                    height: 40,
+                                    child: Material(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.surface,
+                                      shape: CircleBorder(
+                                        side: BorderSide(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
+                                        ),
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: InkWell(
+                                        customBorder: const CircleBorder(),
+                                        onTap: () {
+                                          setState(() {
+                                            _showAdvancedProductFilters =
+                                                !_showAdvancedProductFilters;
+                                          });
+                                        },
+                                        child: Center(
+                                          child: Icon(
+                                            _showAdvancedProductFilters
+                                                ? Icons.expand_less
+                                                : Icons.tune,
+                                            size: 18,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1429,129 +1162,376 @@ class _DashboardPageState extends State<DashboardPage> {
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      if (_showAdvancedOrderFilters) ...[
-                        const SizedBox(height: 10),
-                        DropdownButtonFormField<String>(
-                          initialValue: _selectedOriginFilter,
-                          decoration: InputDecoration(
-                            labelText: 'Filtrar por origem',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
+                          ],
+                        ),
+                        if (_showAdvancedProductFilters) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
                             ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
-                              borderSide: BorderSide(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
                                 color: Theme.of(
                                   context,
                                 ).colorScheme.outlineVariant,
                               ),
                             ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 1.4,
-                              ),
-                            ),
-                            filled: true,
-                            fillColor: Theme.of(context).colorScheme.surface,
-                          ),
-                          items: [_allOriginsLabel, ..._availableOrigins]
-                              .map(
-                                (origin) => DropdownMenuItem<String>(
-                                  value: origin,
-                                  child: Text(origin),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.outline,
                                 ),
-                              )
-                              .toList(growable: false),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _selectedOriginFilter = value);
-                          },
-                        ),
-                        if (_hasActiveAdvancedOrderFilters) ...[
-                          const SizedBox(height: 10),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _QuickStatChip(
-                                    icon: Icons.filter_alt_outlined,
-                                    label:
-                                        '$_activeAdvancedOrderFilterCount filtro(s) ativo(s)',
-                                    minHeight: 40,
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Exibir zerados',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelLarge,
                                   ),
-                                  const SizedBox(width: 8),
-                                  SizedBox(
-                                    height: 40,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _clearAdvancedOrderFilters,
-                                      icon: const Icon(Icons.clear, size: 16),
-                                      label: const Text('Limpar filtros'),
-                                    ),
+                                ),
+                                Transform.scale(
+                                  scale: 0.85,
+                                  child: Switch.adaptive(
+                                    value: _showOutOfStockProducts,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _showOutOfStockProducts = value;
+                                      });
+                                    },
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
+                          const SizedBox(height: 10),
+                          if (_hasActiveAdvancedProductFilters)
+                            const SizedBox(height: 10),
+                          if (isWide)
+                            Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(child: _buildBrandFilterField()),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: _buildExpirationFilterField(),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(child: _buildSortOrderField()),
+                                    const SizedBox(width: 8),
+                                    Tooltip(
+                                      message: _sortAscending
+                                          ? 'Ordem crescente'
+                                          : 'Ordem decrescente',
+                                      child: IconButton.outlined(
+                                        onPressed: () => setState(
+                                          () =>
+                                              _sortAscending = !_sortAscending,
+                                        ),
+                                        icon: Icon(
+                                          _sortAscending
+                                              ? Icons.arrow_upward
+                                              : Icons.arrow_downward,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          else
+                            Column(
+                              children: [
+                                _buildBrandFilterField(),
+                                const SizedBox(height: 10),
+                                _buildExpirationFilterField(),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(child: _buildSortOrderField()),
+                                    const SizedBox(width: 8),
+                                    Tooltip(
+                                      message: _sortAscending
+                                          ? 'Ordem crescente'
+                                          : 'Ordem decrescente',
+                                      child: IconButton.outlined(
+                                        onPressed: () => setState(
+                                          () =>
+                                              _sortAscending = !_sortAscending,
+                                        ),
+                                        icon: Icon(
+                                          _sortAscending
+                                              ? Icons.arrow_upward
+                                              : Icons.arrow_downward,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          if (_hasActiveAdvancedProductFilters) ...[
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _QuickStatChip(
+                                      icon: Icons.filter_alt_outlined,
+                                      label:
+                                          '$_activeAdvancedProductFilterCount filtro(s) ativo(s)',
+                                      minHeight: 40,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    SizedBox(
+                                      height: 40,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _clearAdvancedProductFilters,
+                                        icon: const Icon(Icons.clear, size: 16),
+                                        label: const Text('Limpar filtros'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ],
-                    ],
-                  ),
-                ),
-              ),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (value) {
-                  if (!mounted || _selectedIndex == value) {
-                    return;
-                  }
-                  setState(() => _selectedIndex = value);
+                    ),
+                  );
                 },
-                children: [
-                  _ProductsListTab(
-                    products: _filteredProducts,
-                    orders: _orders,
-                    isLoading: _loadingProducts,
-                    isLoadingMore: _loadingMoreProducts,
-                    canLoadMore: _hasMoreProducts,
-                    onLoadMore: _loadMoreProducts,
-                    onUpdateStock: _showManualStockUpdateDialog,
-                    onUpdateExpirationDate: _showManualExpirationUpdateDialog,
-                    isEditModeEnabled: _editModeEnabled,
-                    onEditProduct: _showEditProductDialog,
-                    onDeleteProduct: _deleteProduct,
-                    emptyMessage: _products.isEmpty
-                        ? 'Use o botao de adicionar para incluir o primeiro produto.'
-                        : 'Nenhum produto encontrado para os filtros aplicados.',
-                  ),
-                  const _PriceCalculatorTab(),
-                  _OrdersListTab(
-                    orders: _filteredOrders,
-                    products: _products,
-                    isLoading: _loadingOrders,
-                    isLoadingMore: _loadingMoreOrders,
-                    canLoadMore: _hasMoreOrders,
-                    onLoadMore: _loadMoreOrders,
-                    isEditModeEnabled: _editModeEnabled,
-                    onEditOrder: _showEditOrderDialog,
-                    onDeleteOrder: _deleteOrder,
-                    emptyMessage: _orders.isEmpty
-                        ? 'Use o botao de adicionar para registrar o primeiro pedido.'
-                        : 'Nenhum pedido encontrado para os filtros aplicados.',
-                  ),
-                ],
               ),
             ),
-          ],
-        ),
+          if (isOrdersTab)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 44,
+                            child: TextField(
+                              scrollPadding: const EdgeInsets.fromLTRB(
+                                20,
+                                20,
+                                20,
+                                220,
+                              ),
+                              onChanged: (value) {
+                                setState(() => _orderSearchQuery = value);
+                              },
+                              decoration: InputDecoration(
+                                prefixIcon: const Icon(Icons.search),
+                                hintText:
+                                    'Buscar pedidos por produto (descricao ou SKU)',
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 8,
+                                ),
+                                suffixIcon: _orderSearchQuery.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        tooltip: 'Limpar busca',
+                                        onPressed: () {
+                                          setState(
+                                            () => _orderSearchQuery = '',
+                                          );
+                                        },
+                                        icon: const Icon(Icons.close),
+                                      ),
+                                filled: true,
+                                fillColor: Theme.of(
+                                  context,
+                                ).colorScheme.surface,
+                                isDense: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outlineVariant,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    width: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: _showAdvancedOrderFilters
+                              ? 'Ocultar filtros'
+                              : 'Mostrar filtros',
+                          child: SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: SizedBox(
+                                width: 40,
+                                height: 40,
+                                child: Material(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  shape: CircleBorder(
+                                    side: BorderSide(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.outlineVariant,
+                                    ),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    customBorder: const CircleBorder(),
+                                    onTap: () {
+                                      setState(() {
+                                        _showAdvancedOrderFilters =
+                                            !_showAdvancedOrderFilters;
+                                      });
+                                    },
+                                    child: Center(
+                                      child: Icon(
+                                        _showAdvancedOrderFilters
+                                            ? Icons.expand_less
+                                            : Icons.tune,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_showAdvancedOrderFilters) ...[
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedOriginFilter,
+                        decoration: InputDecoration(
+                          labelText: 'Filtrar por origem',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 1.4,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context).colorScheme.surface,
+                        ),
+                        items: [_allOriginsLabel, ..._availableOrigins]
+                            .map(
+                              (origin) => DropdownMenuItem<String>(
+                                value: origin,
+                                child: Text(origin),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _selectedOriginFilter = value);
+                        },
+                      ),
+                      if (_hasActiveAdvancedOrderFilters) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _QuickStatChip(
+                                  icon: Icons.filter_alt_outlined,
+                                  label:
+                                      '$_activeAdvancedOrderFilterCount filtro(s) ativo(s)',
+                                  minHeight: 40,
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  height: 40,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _clearAdvancedOrderFilters,
+                                    icon: const Icon(Icons.clear, size: 16),
+                                    label: const Text('Limpar filtros'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          Expanded(
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: 3,
+              onPageChanged: (value) {
+                if (!mounted || _selectedIndex == value) {
+                  return;
+                }
+                setState(() => _selectedIndex = value);
+              },
+              itemBuilder: (context, index) => _buildDashboardTab(index),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: isOrdersTab || isProductsTab
           ? FloatingActionButton(
@@ -1566,7 +1546,6 @@ class _DashboardPageState extends State<DashboardPage> {
           if (_selectedIndex == value) {
             return;
           }
-          setState(() => _selectedIndex = value);
           _pageController.animateToPage(
             value,
             duration: const Duration(milliseconds: 260),
@@ -1682,7 +1661,6 @@ class _ProductsListTab extends StatelessWidget {
     required this.onLoadMore,
     required this.onUpdateStock,
     required this.onUpdateExpirationDate,
-    required this.isEditModeEnabled,
     required this.onEditProduct,
     required this.onDeleteProduct,
     required this.emptyMessage,
@@ -1696,7 +1674,6 @@ class _ProductsListTab extends StatelessWidget {
   final Future<void> Function() onLoadMore;
   final Future<void> Function(Product product) onUpdateStock;
   final Future<void> Function(Product product) onUpdateExpirationDate;
-  final bool isEditModeEnabled;
   final Future<void> Function(Product product) onEditProduct;
   final Future<void> Function(Product product) onDeleteProduct;
   final String emptyMessage;
@@ -1737,7 +1714,6 @@ class _ProductsListTab extends StatelessWidget {
           product: product,
           products: products,
           orders: orders,
-          isEditModeEnabled: isEditModeEnabled,
           onUpdateStock: onUpdateStock,
           onUpdateExpirationDate: onUpdateExpirationDate,
           onEditProduct: onEditProduct,
@@ -1753,7 +1729,6 @@ class _ProductCard extends StatelessWidget {
     required this.product,
     required this.products,
     required this.orders,
-    required this.isEditModeEnabled,
     required this.onUpdateStock,
     required this.onUpdateExpirationDate,
     required this.onEditProduct,
@@ -1763,7 +1738,6 @@ class _ProductCard extends StatelessWidget {
   final Product product;
   final List<Product> products;
   final List<Order> orders;
-  final bool isEditModeEnabled;
   final Future<void> Function(Product product) onUpdateStock;
   final Future<void> Function(Product product) onUpdateExpirationDate;
   final Future<void> Function(Product product) onEditProduct;
@@ -1808,6 +1782,43 @@ class _ProductCard extends StatelessWidget {
                       orders: orders,
                     ),
                   );
+                },
+                onLongPress: () async {
+                  final action = await showModalBottomSheet<_ItemAction>(
+                    context: context,
+                    showDragHandle: true,
+                    builder: (sheetContext) {
+                      return SafeArea(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.edit_outlined),
+                              title: const Text('Editar produto'),
+                              onTap: () => Navigator.of(
+                                sheetContext,
+                              ).pop(_ItemAction.edit),
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.delete_outline),
+                              title: const Text('Excluir produto'),
+                              onTap: () => Navigator.of(
+                                sheetContext,
+                              ).pop(_ItemAction.delete),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+
+                  if (action == _ItemAction.edit) {
+                    await onEditProduct(product);
+                    return;
+                  }
+                  if (action == _ItemAction.delete) {
+                    await onDeleteProduct(product);
+                  }
                 },
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(10, 8, 2, 8),
@@ -1882,88 +1893,30 @@ class _ProductCard extends StatelessWidget {
                             onUpdateStock(product);
                             return;
                           }
-                          if (action == _ProductAction.edit) {
-                            onEditProduct(product);
-                            return;
-                          }
-                          if (action == _ProductAction.delete) {
-                            onDeleteProduct(product);
-                            return;
-                          }
                           onUpdateExpirationDate(product);
                         },
-                        itemBuilder: (context) {
-                          final items = <PopupMenuEntry<_ProductAction>>[
-                            const PopupMenuItem<_ProductAction>(
-                              value: _ProductAction.updateStock,
-                              child: Row(
-                                children: [
-                                  Icon(Icons.inventory_2_outlined, size: 18),
-                                  SizedBox(width: 12),
-                                  Text('Atualizar estoque'),
-                                ],
-                              ),
+                        itemBuilder: (context) => const [
+                          PopupMenuItem<_ProductAction>(
+                            value: _ProductAction.updateStock,
+                            child: Row(
+                              children: [
+                                Icon(Icons.inventory_2_outlined, size: 18),
+                                SizedBox(width: 12),
+                                Text('Atualizar estoque'),
+                              ],
                             ),
-                            const PopupMenuItem<_ProductAction>(
-                              value: _ProductAction.updateExpiration,
-                              child: Row(
-                                children: [
-                                  Icon(Icons.calendar_month_outlined, size: 18),
-                                  SizedBox(width: 12),
-                                  Text('Atualizar validade'),
-                                ],
-                              ),
+                          ),
+                          PopupMenuItem<_ProductAction>(
+                            value: _ProductAction.updateExpiration,
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_month_outlined, size: 18),
+                                SizedBox(width: 12),
+                                Text('Atualizar validade'),
+                              ],
                             ),
-                          ];
-
-                          if (isEditModeEnabled) {
-                            items.add(const PopupMenuDivider());
-                            items.add(
-                              PopupMenuItem<_ProductAction>(
-                                value: _ProductAction.edit,
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.edit_outlined,
-                                      size: 18,
-                                      color: Colors.amber.shade700,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      'Editar produto',
-                                      style: TextStyle(
-                                        color: Colors.amber.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                            items.add(
-                              PopupMenuItem<_ProductAction>(
-                                value: _ProductAction.delete,
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.delete_outline,
-                                      size: 18,
-                                      color: Colors.amber.shade700,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      'Excluir produto',
-                                      style: TextStyle(
-                                        color: Colors.amber.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }
-
-                          return items;
-                        },
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -2015,7 +1968,6 @@ class _OrdersListTab extends StatelessWidget {
     required this.isLoadingMore,
     required this.canLoadMore,
     required this.onLoadMore,
-    required this.isEditModeEnabled,
     required this.onEditOrder,
     required this.onDeleteOrder,
     required this.emptyMessage,
@@ -2027,7 +1979,6 @@ class _OrdersListTab extends StatelessWidget {
   final bool isLoadingMore;
   final bool canLoadMore;
   final Future<void> Function() onLoadMore;
-  final bool isEditModeEnabled;
   final Future<void> Function(Order order) onEditOrder;
   final Future<void> Function(Order order) onDeleteOrder;
   final String emptyMessage;
@@ -2093,6 +2044,42 @@ class _OrdersListTab extends StatelessWidget {
                   orders: orders,
                 ),
               );
+            },
+            onLongPress: () async {
+              final action = await showModalBottomSheet<_ItemAction>(
+                context: context,
+                showDragHandle: true,
+                builder: (sheetContext) {
+                  return SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.edit_outlined),
+                          title: const Text('Editar pedido'),
+                          onTap: () =>
+                              Navigator.of(sheetContext).pop(_ItemAction.edit),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.delete_outline),
+                          title: const Text('Excluir pedido'),
+                          onTap: () => Navigator.of(
+                            sheetContext,
+                          ).pop(_ItemAction.delete),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+
+              if (action == _ItemAction.edit) {
+                await onEditOrder(order);
+                return;
+              }
+              if (action == _ItemAction.delete) {
+                await onDeleteOrder(order);
+              }
             },
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
@@ -2218,55 +2205,6 @@ class _OrdersListTab extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (isEditModeEnabled) ...[
-                    const SizedBox(width: 2),
-                    PopupMenuButton<_OrderAction>(
-                      tooltip: 'Acoes do pedido',
-                      onSelected: (action) {
-                        if (action == _OrderAction.edit) {
-                          onEditOrder(order);
-                          return;
-                        }
-                        onDeleteOrder(order);
-                      },
-                      itemBuilder: (context) => [
-                        PopupMenuItem<_OrderAction>(
-                          value: _OrderAction.edit,
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.edit_outlined,
-                                size: 18,
-                                color: Colors.amber.shade700,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Editar pedido',
-                                style: TextStyle(color: Colors.amber.shade700),
-                              ),
-                            ],
-                          ),
-                        ),
-                        PopupMenuItem<_OrderAction>(
-                          value: _OrderAction.delete,
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.delete_outline,
-                                size: 18,
-                                color: Colors.amber.shade700,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Excluir pedido',
-                                style: TextStyle(color: Colors.amber.shade700),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -6694,9 +6632,11 @@ class _ProductOrderEntry {
   final double lineTotal;
 }
 
-enum _ProductAction { updateStock, updateExpiration, edit, delete }
+enum _ProductAction { updateStock, updateExpiration }
 
-enum _OrderAction { edit, delete }
+enum _ItemAction { edit, delete }
+
+enum _DashboardSettingsAction { themeToggle, logout }
 
 enum _ExpirationFilter { all, warning, expired }
 

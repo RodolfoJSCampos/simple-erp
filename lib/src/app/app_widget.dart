@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/dashboard/presentation/pages/dashboard_page.dart';
@@ -17,11 +18,39 @@ class AppWidget extends StatefulWidget {
 }
 
 class _AppWidgetState extends State<AppWidget> {
+  static const _themeModeKey = 'app_theme_mode';
   bool _showBootSplash = true;
+  ThemeMode _themeMode = ThemeMode.light;
+
+  Future<void> _loadSavedThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_themeModeKey);
+
+    final mode = switch (saved) {
+      'dark' => ThemeMode.dark,
+      'light' => ThemeMode.light,
+      _ => ThemeMode.light,
+    };
+
+    if (!mounted) return;
+    setState(() => _themeMode = mode);
+  }
+
+  Future<void> _setThemeMode(ThemeMode mode) async {
+    if (!mounted) return;
+    setState(() => _themeMode = mode);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _themeModeKey,
+      mode == ThemeMode.dark ? 'dark' : 'light',
+    );
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadSavedThemeMode();
     Timer(const Duration(milliseconds: 1500), () {
       if (!mounted) {
         return;
@@ -34,33 +63,57 @@ class _AppWidgetState extends State<AppWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
+    final lightColorScheme = ColorScheme.fromSeed(
       seedColor: Colors.blue,
       brightness: Brightness.light,
+    );
+    final darkColorScheme = ColorScheme.fromSeed(
+      seedColor: Colors.blue,
+      brightness: Brightness.dark,
     );
 
     return MaterialApp(
       title: 'Simple ERP',
       theme: ThemeData(
-        colorScheme: colorScheme,
+        colorScheme: lightColorScheme,
         useMaterial3: true,
         scaffoldBackgroundColor: Colors.white,
         appBarTheme: AppBarTheme(
           backgroundColor: Colors.white,
-          foregroundColor: colorScheme.onSurface,
+          foregroundColor: lightColorScheme.onSurface,
           surfaceTintColor: Colors.transparent,
           elevation: 0,
           scrolledUnderElevation: 0,
         ),
         cardTheme: CardThemeData(
-          color: colorScheme.surface,
+          color: lightColorScheme.surface,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
-            side: BorderSide(color: colorScheme.outlineVariant),
+            side: BorderSide(color: lightColorScheme.outlineVariant),
           ),
         ),
       ),
+      darkTheme: ThemeData(
+        colorScheme: darkColorScheme,
+        useMaterial3: true,
+        appBarTheme: AppBarTheme(
+          backgroundColor: darkColorScheme.surface,
+          foregroundColor: darkColorScheme.onSurface,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
+        cardTheme: CardThemeData(
+          color: darkColorScheme.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: darkColorScheme.outlineVariant),
+          ),
+        ),
+      ),
+      themeMode: _themeMode,
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
@@ -81,6 +134,10 @@ class _AppWidgetState extends State<AppWidget> {
                 productController: widget.dependencies.productController,
                 orderController: widget.dependencies.orderController,
                 usingFirebase: widget.dependencies.usingFirebase,
+                themeMode: _themeMode,
+                onThemeModeChanged: (mode) {
+                  _setThemeMode(mode);
+                },
               ),
             );
           }
@@ -161,9 +218,12 @@ class _EntrySplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return _SplashFrame(
-      backgroundColor: const Color(0xFFF8FAFC),
-      accentColor: const Color(0xFF2563EB),
+      backgroundColor: isDark
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
+      accentColor: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
       title: 'Simple ERP',
       subtitle: 'Organize estoque e pedidos com simplicidade.',
       icon: Icons.inventory_2_rounded,
@@ -176,9 +236,12 @@ class _PostLoginSplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return _SplashFrame(
-      backgroundColor: const Color(0xFFF8FAFC),
-      accentColor: const Color(0xFF0EA5A4),
+      backgroundColor: isDark
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
+      accentColor: isDark ? const Color(0xFF2DD4BF) : const Color(0xFF0EA5A4),
       title: 'Tudo pronto',
       subtitle: 'Carregando seu painel.',
       icon: Icons.dashboard_customize_rounded,
