@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/dashboard/presentation/pages/dashboard_page.dart';
+import '../core/platform/theme_system_ui.dart';
 import 'dependencies.dart';
 
 class AppWidget extends StatefulWidget {
@@ -32,11 +33,15 @@ class _AppWidgetState extends State<AppWidget> {
       _ => ThemeMode.light,
     };
 
+    applyThemeSystemUi(mode);
+
     if (!mounted) return;
     setState(() => _themeMode = mode);
   }
 
   Future<void> _setThemeMode(ThemeMode mode) async {
+    applyThemeSystemUi(mode);
+
     if (!mounted) return;
     setState(() => _themeMode = mode);
 
@@ -50,6 +55,7 @@ class _AppWidgetState extends State<AppWidget> {
   @override
   void initState() {
     super.initState();
+    applyThemeSystemUi(_themeMode);
     _loadSavedThemeMode();
     Timer(const Duration(milliseconds: 1500), () {
       if (!mounted) {
