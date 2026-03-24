@@ -882,6 +882,28 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  Widget _buildDashboardPage(int index) {
+    switch (index) {
+      case 0:
+        return Column(
+          children: [
+            _buildProductsFiltersHeader(),
+            Expanded(child: _buildDashboardTab(0)),
+          ],
+        );
+      case 2:
+        return Column(
+          children: [
+            _buildOrdersFiltersHeader(),
+            Expanded(child: _buildDashboardTab(2)),
+          ],
+        );
+      case 1:
+      default:
+        return _buildDashboardTab(1);
+    }
+  }
+
   Future<void> _requestLogout() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1033,505 +1055,17 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (isProductsTab)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth >= 860;
-
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outlineVariant,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: SizedBox(
-                                height: 44,
-                                child: TextField(
-                                  scrollPadding: const EdgeInsets.fromLTRB(
-                                    20,
-                                    20,
-                                    20,
-                                    220,
-                                  ),
-                                  onChanged: (value) {
-                                    setState(() => _searchQuery = value);
-                                  },
-                                  decoration: InputDecoration(
-                                    prefixIcon: const Icon(Icons.search),
-                                    hintText: 'Buscar por descricao ou SKU',
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
-                                    ),
-                                    suffixIcon: _searchQuery.isEmpty
-                                        ? null
-                                        : IconButton(
-                                            tooltip: 'Limpar busca',
-                                            onPressed: () {
-                                              setState(() => _searchQuery = '');
-                                            },
-                                            icon: const Icon(Icons.close),
-                                          ),
-                                    filled: true,
-                                    fillColor: Theme.of(
-                                      context,
-                                    ).colorScheme.surface,
-                                    isDense: true,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: BorderSide(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.outlineVariant,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: BorderSide(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                        width: 1.4,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Tooltip(
-                              message: _showAdvancedProductFilters
-                                  ? 'Ocultar filtros'
-                                  : 'Mostrar filtros',
-                              child: SizedBox(
-                                width: 44,
-                                height: 44,
-                                child: Align(
-                                  alignment: Alignment.topCenter,
-                                  child: SizedBox(
-                                    width: 40,
-                                    height: 40,
-                                    child: Material(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.surface,
-                                      shape: CircleBorder(
-                                        side: BorderSide(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.outlineVariant,
-                                        ),
-                                      ),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: InkWell(
-                                        customBorder: const CircleBorder(),
-                                        onTap: () {
-                                          setState(() {
-                                            _showAdvancedProductFilters =
-                                                !_showAdvancedProductFilters;
-                                          });
-                                        },
-                                        child: Center(
-                                          child: Icon(
-                                            _showAdvancedProductFilters
-                                                ? Icons.expand_less
-                                                : Icons.tune,
-                                            size: 18,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (_showAdvancedProductFilters) ...[
-                          const SizedBox(height: 10),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.outlineVariant,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.inventory_2_outlined,
-                                  size: 16,
-                                  color: Theme.of(context).colorScheme.outline,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'Exibir zerados',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelLarge,
-                                  ),
-                                ),
-                                Transform.scale(
-                                  scale: 0.85,
-                                  child: Switch.adaptive(
-                                    value: _showOutOfStockProducts,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _showOutOfStockProducts = value;
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          if (_hasActiveAdvancedProductFilters)
-                            const SizedBox(height: 10),
-                          if (isWide)
-                            Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(child: _buildBrandFilterField()),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: _buildExpirationFilterField(),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    Expanded(child: _buildSortOrderField()),
-                                    const SizedBox(width: 8),
-                                    Tooltip(
-                                      message: _sortAscending
-                                          ? 'Ordem crescente'
-                                          : 'Ordem decrescente',
-                                      child: IconButton.outlined(
-                                        onPressed: () => setState(
-                                          () =>
-                                              _sortAscending = !_sortAscending,
-                                        ),
-                                        icon: Icon(
-                                          _sortAscending
-                                              ? Icons.arrow_upward
-                                              : Icons.arrow_downward,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            )
-                          else
-                            Column(
-                              children: [
-                                _buildBrandFilterField(),
-                                const SizedBox(height: 10),
-                                _buildExpirationFilterField(),
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    Expanded(child: _buildSortOrderField()),
-                                    const SizedBox(width: 8),
-                                    Tooltip(
-                                      message: _sortAscending
-                                          ? 'Ordem crescente'
-                                          : 'Ordem decrescente',
-                                      child: IconButton.outlined(
-                                        onPressed: () => setState(
-                                          () =>
-                                              _sortAscending = !_sortAscending,
-                                        ),
-                                        icon: Icon(
-                                          _sortAscending
-                                              ? Icons.arrow_upward
-                                              : Icons.arrow_downward,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          if (_hasActiveAdvancedProductFilters) ...[
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _QuickStatChip(
-                                      icon: Icons.filter_alt_outlined,
-                                      label:
-                                          '$_activeAdvancedProductFilterCount filtro(s) ativo(s)',
-                                      minHeight: 40,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    SizedBox(
-                                      height: 40,
-                                      child: OutlinedButton.icon(
-                                        onPressed: _clearAdvancedProductFilters,
-                                        icon: const Icon(Icons.clear, size: 16),
-                                        label: const Text('Limpar filtros'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          if (isOrdersTab)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 44,
-                            child: TextField(
-                              scrollPadding: const EdgeInsets.fromLTRB(
-                                20,
-                                20,
-                                20,
-                                220,
-                              ),
-                              onChanged: (value) {
-                                setState(() => _orderSearchQuery = value);
-                              },
-                              decoration: InputDecoration(
-                                prefixIcon: const Icon(Icons.search),
-                                hintText:
-                                    'Buscar pedidos por produto (descricao ou SKU)',
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                suffixIcon: _orderSearchQuery.isEmpty
-                                    ? null
-                                    : IconButton(
-                                        tooltip: 'Limpar busca',
-                                        onPressed: () {
-                                          setState(
-                                            () => _orderSearchQuery = '',
-                                          );
-                                        },
-                                        icon: const Icon(Icons.close),
-                                      ),
-                                filled: true,
-                                fillColor: Theme.of(
-                                  context,
-                                ).colorScheme.surface,
-                                isDense: true,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outlineVariant,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    width: 1.4,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Tooltip(
-                          message: _showAdvancedOrderFilters
-                              ? 'Ocultar filtros'
-                              : 'Mostrar filtros',
-                          child: SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: SizedBox(
-                                width: 40,
-                                height: 40,
-                                child: Material(
-                                  color: Theme.of(context).colorScheme.surface,
-                                  shape: CircleBorder(
-                                    side: BorderSide(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.outlineVariant,
-                                    ),
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: InkWell(
-                                    customBorder: const CircleBorder(),
-                                    onTap: () {
-                                      setState(() {
-                                        _showAdvancedOrderFilters =
-                                            !_showAdvancedOrderFilters;
-                                      });
-                                    },
-                                    child: Center(
-                                      child: Icon(
-                                        _showAdvancedOrderFilters
-                                            ? Icons.expand_less
-                                            : Icons.tune,
-                                        size: 18,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_showAdvancedOrderFilters) ...[
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        initialValue: _selectedOriginFilter,
-                        decoration: InputDecoration(
-                          labelText: 'Filtrar por origem',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.outlineVariant,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 1.4,
-                            ),
-                          ),
-                          filled: true,
-                          fillColor: Theme.of(context).colorScheme.surface,
-                        ),
-                        items: [_allOriginsLabel, ..._availableOrigins]
-                            .map(
-                              (origin) => DropdownMenuItem<String>(
-                                value: origin,
-                                child: Text(origin),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _selectedOriginFilter = value);
-                        },
-                      ),
-                      if (_hasActiveAdvancedOrderFilters) ...[
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _QuickStatChip(
-                                  icon: Icons.filter_alt_outlined,
-                                  label:
-                                      '$_activeAdvancedOrderFilterCount filtro(s) ativo(s)',
-                                  minHeight: 40,
-                                ),
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  height: 40,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _clearAdvancedOrderFilters,
-                                    icon: const Icon(Icons.clear, size: 16),
-                                    label: const Text('Limpar filtros'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          Expanded(
-            child: PageView.builder(
-              controller: _pageController,
-              itemCount: 3,
-              onPageChanged: (value) {
-                if (!mounted || _selectedIndex == value) {
-                  return;
-                }
-                setState(() => _selectedIndex = value);
-              },
-              itemBuilder: (context, index) => _buildDashboardTab(index),
-            ),
-          ),
-        ],
+      body: PageView.builder(
+        controller: _pageController,
+        physics: const BouncingScrollPhysics(),
+        itemCount: 3,
+        onPageChanged: (value) {
+          if (!mounted || _selectedIndex == value) {
+            return;
+          }
+          setState(() => _selectedIndex = value);
+        },
+        itemBuilder: (context, index) => _buildDashboardPage(index),
       ),
       floatingActionButton: isOrdersTab || isProductsTab
           ? FloatingActionButton(
@@ -1548,8 +1082,8 @@ class _DashboardPageState extends State<DashboardPage> {
           }
           _pageController.animateToPage(
             value,
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
+            duration: const Duration(milliseconds: 360),
+            curve: Curves.easeInOutCubicEmphasized,
           );
         },
         destinations: const [
@@ -1569,6 +1103,464 @@ class _DashboardPageState extends State<DashboardPage> {
             label: 'Pedidos',
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProductsFiltersHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 860;
+
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 44,
+                        child: TextField(
+                          scrollPadding: const EdgeInsets.fromLTRB(
+                            20,
+                            20,
+                            20,
+                            220,
+                          ),
+                          onChanged: (value) {
+                            setState(() => _searchQuery = value);
+                          },
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.search),
+                            hintText: 'Buscar por descricao ou SKU',
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            suffixIcon: _searchQuery.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Limpar busca',
+                                    onPressed: () {
+                                      setState(() => _searchQuery = '');
+                                    },
+                                    icon: const Icon(Icons.close),
+                                  ),
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.surface,
+                            isDense: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.outlineVariant,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 1.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: _showAdvancedProductFilters
+                          ? 'Ocultar filtros'
+                          : 'Mostrar filtros',
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: Material(
+                              color: Theme.of(context).colorScheme.surface,
+                              shape: CircleBorder(
+                                side: BorderSide(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.outlineVariant,
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () {
+                                  setState(() {
+                                    _showAdvancedProductFilters =
+                                        !_showAdvancedProductFilters;
+                                  });
+                                },
+                                child: Center(
+                                  child: Icon(
+                                    _showAdvancedProductFilters
+                                        ? Icons.expand_less
+                                        : Icons.tune,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_showAdvancedProductFilters) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Exibir zerados',
+                            style: Theme.of(context).textTheme.labelLarge,
+                          ),
+                        ),
+                        Transform.scale(
+                          scale: 0.85,
+                          child: Switch.adaptive(
+                            value: _showOutOfStockProducts,
+                            onChanged: (value) {
+                              setState(() {
+                                _showOutOfStockProducts = value;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (_hasActiveAdvancedProductFilters)
+                    const SizedBox(height: 10),
+                  if (isWide)
+                    Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: _buildBrandFilterField()),
+                            const SizedBox(width: 10),
+                            Expanded(child: _buildExpirationFilterField()),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(child: _buildSortOrderField()),
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message: _sortAscending
+                                  ? 'Ordem crescente'
+                                  : 'Ordem decrescente',
+                              child: IconButton.outlined(
+                                onPressed: () => setState(
+                                  () => _sortAscending = !_sortAscending,
+                                ),
+                                icon: Icon(
+                                  _sortAscending
+                                      ? Icons.arrow_upward
+                                      : Icons.arrow_downward,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  else
+                    Column(
+                      children: [
+                        _buildBrandFilterField(),
+                        const SizedBox(height: 10),
+                        _buildExpirationFilterField(),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(child: _buildSortOrderField()),
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message: _sortAscending
+                                  ? 'Ordem crescente'
+                                  : 'Ordem decrescente',
+                              child: IconButton.outlined(
+                                onPressed: () => setState(
+                                  () => _sortAscending = !_sortAscending,
+                                ),
+                                icon: Icon(
+                                  _sortAscending
+                                      ? Icons.arrow_upward
+                                      : Icons.arrow_downward,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  if (_hasActiveAdvancedProductFilters) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _QuickStatChip(
+                              icon: Icons.filter_alt_outlined,
+                              label:
+                                  '$_activeAdvancedProductFilterCount filtro(s) ativo(s)',
+                              minHeight: 40,
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              height: 40,
+                              child: OutlinedButton.icon(
+                                onPressed: _clearAdvancedProductFilters,
+                                icon: const Icon(Icons.clear, size: 16),
+                                label: const Text('Limpar filtros'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildOrdersFiltersHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: TextField(
+                      scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                      onChanged: (value) {
+                        setState(() => _orderSearchQuery = value);
+                      },
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText:
+                            'Buscar pedidos por produto (descricao ou SKU)',
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        suffixIcon: _orderSearchQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Limpar busca',
+                                onPressed: () {
+                                  setState(() => _orderSearchQuery = '');
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surface,
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 1.4,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: _showAdvancedOrderFilters
+                      ? 'Ocultar filtros'
+                      : 'Mostrar filtros',
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          shape: CircleBorder(
+                            side: BorderSide(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
+                            ),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () {
+                              setState(() {
+                                _showAdvancedOrderFilters =
+                                    !_showAdvancedOrderFilters;
+                              });
+                            },
+                            child: Center(
+                              child: Icon(
+                                _showAdvancedOrderFilters
+                                    ? Icons.expand_less
+                                    : Icons.tune,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_showAdvancedOrderFilters) ...[
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedOriginFilter,
+                decoration: InputDecoration(
+                  labelText: 'Filtrar por origem',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 1.4,
+                    ),
+                  ),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.surface,
+                ),
+                items: [_allOriginsLabel, ..._availableOrigins]
+                    .map(
+                      (origin) => DropdownMenuItem<String>(
+                        value: origin,
+                        child: Text(origin),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _selectedOriginFilter = value);
+                },
+              ),
+              if (_hasActiveAdvancedOrderFilters) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _QuickStatChip(
+                          icon: Icons.filter_alt_outlined,
+                          label:
+                              '$_activeAdvancedOrderFilterCount filtro(s) ativo(s)',
+                          minHeight: 40,
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 40,
+                          child: OutlinedButton.icon(
+                            onPressed: _clearAdvancedOrderFilters,
+                            icon: const Icon(Icons.clear, size: 16),
+                            label: const Text('Limpar filtros'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
       ),
     );
   }
